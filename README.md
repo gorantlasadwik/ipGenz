@@ -18,6 +18,22 @@ A modern, Netflix-inspired IPTV platform that unifies Live TV, Movies, and Serie
 
 ---
 
+## 📸 Screenshots
+
+<div align="center">
+  <img src="docs/images/landing.png" alt="Landing Page" width="800"/>
+  <br/><br/>
+  <img src="docs/images/live-tv.png" alt="Live TV" width="800"/>
+  <br/><br/>
+  <img src="docs/images/movies.png" alt="Movies" width="800"/>
+  <br/><br/>
+  <img src="docs/images/series.png" alt="Series" width="800"/>
+  <br/><br/>
+  <img src="docs/images/providers.png" alt="Providers" width="800"/>
+</div>
+
+---
+
 ## ✨ Vision
 
 ipGenz is not just another standard IPTV player. 
