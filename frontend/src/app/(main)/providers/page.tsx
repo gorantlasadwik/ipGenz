@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Database, Server, RefreshCw, Trash2, X } from "lucide-react"
+import { Plus, Database, Server, RefreshCw, Trash2, X, AlertCircle } from "lucide-react"
+import Link from "next/link"
 import { api, isDemoUser } from "@/lib/api"
 
 interface Provider {
@@ -20,6 +21,7 @@ export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
+  const [showDemoModal, setShowDemoModal] = useState(false)
   const [isDemo, setIsDemo] = useState(false)
   const [form, setForm] = useState({
     providerName: "",
@@ -133,12 +135,10 @@ export default function ProvidersPage() {
           <h1 className="text-4xl font-bold tracking-tight text-white mb-2">My Providers</h1>
           <p className="text-secondary-foreground text-lg">Manage your IPTV subscriptions and playlists.</p>
         </div>
-        {!isDemo && (
-          <button onClick={() => setShowAdd(true)} className="bg-primary text-white px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition flex items-center gap-2">
-            <Plus size={20} />
-            Add Provider
-          </button>
-        )}
+        <button onClick={() => isDemo ? setShowDemoModal(true) : setShowAdd(true)} className="bg-primary text-white px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition flex items-center gap-2">
+          <Plus size={20} />
+          Add Provider
+        </button>
       </div>
 
       {/* Add Provider Modal */}
@@ -267,11 +267,9 @@ export default function ProvidersPage() {
           <Database size={64} className="mx-auto text-zinc-700 mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">No Providers Yet</h2>
           <p className="text-secondary-foreground mb-6">Add your first IPTV provider to start streaming.</p>
-          {!isDemo && (
-            <button onClick={() => setShowAdd(true)} className="bg-primary text-white px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition">
-              Add Your First Provider
-            </button>
-          )}
+          <button onClick={() => isDemo ? setShowDemoModal(true) : setShowAdd(true)} className="bg-primary text-white px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition">
+            Add Your First Provider
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -336,6 +334,32 @@ export default function ProvidersPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Demo Modal */}
+      {showDemoModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-sm" onClick={() => setShowDemoModal(false)}>
+          <div className="bg-surface border border-white/10 rounded-2xl p-8 w-full max-w-md text-center" onClick={e => e.stopPropagation()}>
+            <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertCircle size={32} className="text-primary" />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">Unlock Full Access</h2>
+            <p className="text-secondary-foreground mb-8">
+              You are currently using a demo account. To add your own IPTV providers and access the full app features, please login or create a free account.
+            </p>
+            <div className="flex flex-col gap-3">
+              <Link href="/signup" className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3 rounded-lg transition">
+                Create Account
+              </Link>
+              <Link href="/login" className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-lg transition border border-white/10">
+                Log In
+              </Link>
+              <button onClick={() => setShowDemoModal(false)} className="mt-4 text-sm text-secondary-foreground hover:text-white transition">
+                Continue with Demo
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
