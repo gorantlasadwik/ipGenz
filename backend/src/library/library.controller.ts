@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ContentType } from '@prisma/client';
@@ -55,6 +55,7 @@ export class LibraryController {
 
   @Post('favorites')
   async addFavorite(@Request() req: any, @Body() body: { profileId: string; contentType: ContentType; contentId: string }) {
+    if (req.user.email === 'demo@ipgenz.com') throw new ForbiddenException('Demo users cannot add favorites');
     const profile = await this.prisma.profile.findFirst({ where: { id: body.profileId, userId: req.user.userId } });
     if (!profile) throw new Error('Profile not found or access denied');
     
@@ -87,6 +88,7 @@ export class LibraryController {
 
   @Post('watch-later')
   async addWatchLater(@Request() req: any, @Body() body: { profileId: string; contentType: ContentType; contentId: string }) {
+    if (req.user.email === 'demo@ipgenz.com') throw new ForbiddenException('Demo users cannot modify watch later');
     const profile = await this.prisma.profile.findFirst({ where: { id: body.profileId, userId: req.user.userId } });
     if (!profile) throw new Error('Profile not found or access denied');
     
@@ -200,6 +202,7 @@ export class LibraryController {
 
   @Post('playlists')
   async createPlaylist(@Request() req: any, @Body() body: { profileId: string; name: string; description?: string }) {
+    if (req.user.email === 'demo@ipgenz.com') throw new ForbiddenException('Demo users cannot create playlists');
     const profile = await this.prisma.profile.findFirst({ where: { id: body.profileId, userId: req.user.userId } });
     if (!profile) throw new Error('Profile not found or access denied');
     
@@ -218,6 +221,7 @@ export class LibraryController {
     contentId: string;
     position: number;
   }) {
+    if (req.user.email === 'demo@ipgenz.com') throw new ForbiddenException('Demo users cannot modify playlists');
     const pl = await this.prisma.playlist.findFirst({ where: { id: playlistId, profile: { userId: req.user.userId } } });
     if (!pl) throw new Error('Playlist not found');
     

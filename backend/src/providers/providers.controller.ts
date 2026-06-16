@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Body, Param, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProviderType } from '@prisma/client';
@@ -18,6 +18,11 @@ export class ProvidersController {
     password?: string;
     playlistUrl?: string;
   }) {
+    const demoUser = await this.prisma.user.findUnique({ where: { email: 'demo@ipgenz.com' } });
+    if (req.user.userId === demoUser?.id) {
+      throw new ForbiddenException('Demo users cannot add providers');
+    }
+
     return this.prisma.provider.create({
       data: {
         userId: req.user.userId,
@@ -90,6 +95,11 @@ export class ProvidersController {
 
   @Delete(':id')
   async deleteProvider(@Request() req: any, @Param('id') id: string) {
+    const demoUser = await this.prisma.user.findUnique({ where: { email: 'demo@ipgenz.com' } });
+    if (req.user.userId === demoUser?.id) {
+      throw new ForbiddenException('Demo users cannot delete providers');
+    }
+
     // Verify ownership
     const provider = await this.prisma.provider.findFirst({
       where: { id, userId: req.user.userId },

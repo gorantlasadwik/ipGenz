@@ -23,9 +23,25 @@ export class ProfilesService {
   }
 
   async getProfiles(userId: string) {
-    return this.prisma.profile.findMany({
+    const profiles = await this.prisma.profile.findMany({
       where: { userId }
     });
+    return profiles.map(p => {
+      const { pin, ...rest } = p;
+      return { ...rest, hasPin: !!pin };
+    });
+  }
+
+  async updateProfile(userId: string, profileId: string, data: { pin: string | null }) {
+    const profile = await this.prisma.profile.findFirst({ where: { id: profileId, userId } });
+    if (!profile) throw new BadRequestException('Profile not found');
+    
+    const updated = await this.prisma.profile.update({
+      where: { id: profileId },
+      data: { pin: data.pin }
+    });
+    const { pin, ...rest } = updated;
+    return { ...rest, hasPin: !!pin };
   }
 
   async verifyPin(profileId: string, pin: string) {

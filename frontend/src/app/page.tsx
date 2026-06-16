@@ -20,6 +20,11 @@ export default function PremiumLandingPage() {
     try {
       const data = await api.demoLogin()
       localStorage.setItem("token", data.access_token)
+      if (data.user?.isDemo) {
+        localStorage.setItem("isDemo", "true")
+      } else {
+        localStorage.setItem("isDemo", "false")
+      }
       router.push("/profiles")
     } catch (err) {
       console.error("Failed to start demo:", err)

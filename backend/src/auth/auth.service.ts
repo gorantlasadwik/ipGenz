@@ -25,7 +25,8 @@ export class AuthService {
       access_token: this.jwtService.sign(payload),
       user: {
         id: user.id,
-        email: user.email
+        email: user.email,
+        isDemo: user.email === 'demo@ipgenz.com'
       }
     };
   }

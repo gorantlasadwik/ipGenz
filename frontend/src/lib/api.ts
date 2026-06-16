@@ -13,6 +13,11 @@ function authHeaders(): HeadersInit {
   };
 }
 
+export function isDemoUser() {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem('isDemo') === 'true';
+}
+
 export const api = {
   // ─── AUTH ────────────────────────────────────────────────────────────────
   async register(email: string, password: string) {
@@ -49,6 +54,26 @@ export const api = {
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error('Failed to create profile');
+    return res.json();
+  },
+
+  async updateProfile(id: string, data: { pin: string | null }) {
+    const res = await fetch(`${API_BASE}/profiles/${id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update profile');
+    return res.json();
+  },
+
+  async verifyPin(profileId: string, pin: string) {
+    const res = await fetch(`${API_BASE}/profiles/verify-pin`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ profileId, pin }),
+    });
+    if (!res.ok) throw new Error('Failed to verify PIN');
     return res.json();
   },
 

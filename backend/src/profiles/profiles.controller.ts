@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, Get, Put, Param, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { ProfilesService } from './profiles.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProfileType } from '@prisma/client';
@@ -10,6 +10,9 @@ export class ProfilesController {
 
   @Post()
   async createProfile(@Request() req: any, @Body() body: { name: string, profileType: ProfileType, pin?: string, avatar?: string }) {
+    if (req.user.email === 'demo@ipgenz.com') {
+      throw new ForbiddenException('Demo users cannot create profiles');
+    }
     return this.profilesService.createProfile(req.user.userId, body);
   }
 
@@ -22,5 +25,13 @@ export class ProfilesController {
   async verifyPin(@Body() body: { profileId: string, pin: string }) {
     const isValid = await this.profilesService.verifyPin(body.profileId, body.pin);
     return { valid: isValid };
+  }
+
+  @Put(':id')
+  async updateProfile(@Request() req: any, @Param('id') id: string, @Body() body: { pin: string | null }) {
+    if (req.user.email === 'demo@ipgenz.com') {
+      throw new ForbiddenException('Demo users cannot lock profiles');
+    }
+    return this.profilesService.updateProfile(req.user.userId, id, body);
   }
 }

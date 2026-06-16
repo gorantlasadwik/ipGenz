@@ -30,6 +30,11 @@ export default function LoginPage() {
       const data = await res.json()
       // In a real app, store data.access_token securely (e.g., HTTP-only cookie or localStorage for dev)
       localStorage.setItem("token", data.access_token)
+      if (data.user?.isDemo) {
+        localStorage.setItem("isDemo", "true")
+      } else {
+        localStorage.setItem("isDemo", "false")
+      }
       
       router.push("/profiles")
     } catch (err: any) {

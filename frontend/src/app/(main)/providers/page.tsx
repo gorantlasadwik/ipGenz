@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Plus, Database, Server, RefreshCw, Trash2, X } from "lucide-react"
-import { api } from "@/lib/api"
+import { api, isDemoUser } from "@/lib/api"
 
 interface Provider {
   id: string
@@ -20,6 +20,7 @@ export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
+  const [isDemo, setIsDemo] = useState(false)
   const [form, setForm] = useState({
     providerName: "",
     providerType: "XTREAM",
@@ -43,7 +44,10 @@ export default function ProvidersPage() {
     }
   }
 
-  useEffect(() => { loadProviders() }, [])
+  useEffect(() => { 
+    setIsDemo(isDemoUser())
+    loadProviders() 
+  }, [])
 
   useEffect(() => {
     let interval: NodeJS.Timeout
@@ -129,10 +133,12 @@ export default function ProvidersPage() {
           <h1 className="text-4xl font-bold tracking-tight text-white mb-2">My Providers</h1>
           <p className="text-secondary-foreground text-lg">Manage your IPTV subscriptions and playlists.</p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="bg-primary text-white px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition flex items-center gap-2">
-          <Plus size={20} />
-          Add Provider
-        </button>
+        {!isDemo && (
+          <button onClick={() => setShowAdd(true)} className="bg-primary text-white px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition flex items-center gap-2">
+            <Plus size={20} />
+            Add Provider
+          </button>
+        )}
       </div>
 
       {/* Add Provider Modal */}
@@ -261,9 +267,11 @@ export default function ProvidersPage() {
           <Database size={64} className="mx-auto text-zinc-700 mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">No Providers Yet</h2>
           <p className="text-secondary-foreground mb-6">Add your first IPTV provider to start streaming.</p>
-          <button onClick={() => setShowAdd(true)} className="bg-primary text-white px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition">
-            Add Your First Provider
-          </button>
+          {!isDemo && (
+            <button onClick={() => setShowAdd(true)} className="bg-primary text-white px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition">
+              Add Your First Provider
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -309,14 +317,22 @@ export default function ProvidersPage() {
               </div>
 
               <div className="flex items-center gap-3 border-t border-white/5 pt-4">
-                <button onClick={() => handleSync(provider.id)} disabled={provider.status === "SYNCING"}
-                  className="flex-1 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-md text-sm font-bold transition flex items-center justify-center gap-2 disabled:opacity-50">
-                  <RefreshCw size={16} className={provider.status === "SYNCING" ? "animate-spin" : ""} /> {provider.status === "SYNCING" ? "Syncing..." : "Sync Now"}
-                </button>
-                <button onClick={() => handleDelete(provider.id)}
-                  className="bg-red-500/10 hover:bg-red-500/20 text-red-500 px-4 py-2 rounded-md text-sm font-bold transition">
-                  <Trash2 size={16} />
-                </button>
+                {!isDemo ? (
+                  <>
+                    <button onClick={() => handleSync(provider.id)} disabled={provider.status === "SYNCING"}
+                      className="flex-1 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-md text-sm font-bold transition flex items-center justify-center gap-2 disabled:opacity-50">
+                      <RefreshCw size={16} className={provider.status === "SYNCING" ? "animate-spin" : ""} /> {provider.status === "SYNCING" ? "Syncing..." : "Sync Now"}
+                    </button>
+                    <button onClick={() => handleDelete(provider.id)}
+                      className="bg-red-500/10 hover:bg-red-500/20 text-red-500 px-4 py-2 rounded-md text-sm font-bold transition">
+                      <Trash2 size={16} />
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex-1 text-center py-2 text-xs text-white/40 font-bold tracking-widest uppercase border border-white/5 rounded-md">
+                    Demo Mode Locked
+                  </div>
+                )}
               </div>
             </div>
           ))}

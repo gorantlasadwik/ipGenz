@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { Play, Heart, Clock, ArrowLeft } from "lucide-react"
 import Link from "next/link"
-import { api } from "@/lib/api"
+import { api, isDemoUser } from "@/lib/api"
 import { VodPlayer } from "@/components/VodPlayer"
 
 export default function SeriesDetailPage() {
@@ -14,8 +14,10 @@ export default function SeriesDetailPage() {
   const [activeEpisode, setActiveEpisode] = useState<any>(null)
   const [isFavorite, setIsFavorite] = useState(false)
   const [isWatchLater, setIsWatchLater] = useState(false)
+  const [isDemo, setIsDemo] = useState(false)
 
   useEffect(() => {
+    setIsDemo(isDemoUser())
     if (params.id) {
       api.getSeriesById(params.id as string).then(data => {
         setSeries(data)
@@ -134,21 +136,25 @@ export default function SeriesDetailPage() {
             <div className="flex items-center gap-4">
               <button 
                 onClick={handleFavoriteToggle}
+                disabled={isDemo}
                 className={`px-6 py-3 rounded-md font-bold transition backdrop-blur-md flex items-center gap-2 border ${
                   isFavorite 
                     ? "bg-primary/20 border-primary text-primary hover:bg-primary/30" 
                     : "bg-white/20 border-transparent text-white hover:bg-white/30"
-                }`}
+                } ${isDemo ? "opacity-50 cursor-not-allowed" : ""}`}
+                title={isDemo ? "Favorites disabled in demo mode" : ""}
               >
                 <Heart size={20} className={isFavorite ? "fill-current" : ""} /> Favorite
               </button>
               <button 
                 onClick={handleWatchLaterToggle}
+                disabled={isDemo}
                 className={`px-6 py-3 rounded-md font-bold transition backdrop-blur-md flex items-center gap-2 border ${
                   isWatchLater 
                     ? "bg-primary/20 border-primary text-primary hover:bg-primary/30" 
                     : "bg-white/20 border-transparent text-white hover:bg-white/30"
-                }`}
+                } ${isDemo ? "opacity-50 cursor-not-allowed" : ""}`}
+                title={isDemo ? "Watch Later disabled in demo mode" : ""}
               >
                 <Clock size={20} className={isWatchLater ? "fill-current" : ""} /> Watch Later
               </button>
