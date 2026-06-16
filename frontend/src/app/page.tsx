@@ -5,10 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { api } from "@/lib/api"
 import { motion, AnimatePresence } from "framer-motion"
-import { 
-  Tv, MonitorPlay, Film, Zap, Search, Users, 
-  Download, Activity, Server, ChevronDown, CheckCircle2, Play, Sparkles
-} from "lucide-react"
+import { MonitorPlay, Play, Sparkles } from "lucide-react"
 
 const GithubIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" className={className}>
@@ -125,14 +122,14 @@ export default function PremiumLandingPage() {
             transition={{ duration: 0.8, delay: 0.1, ease: "easeOut" }}
             className="flex flex-col items-center"
           >
-            <h1 className="text-5xl md:text-8xl font-black tracking-tighter leading-[1.05] mb-6">
-              Next-Gen Playback. <br/>
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-500">
-                Zero Compromises.
-              </span>
+            <div className="flex items-center gap-4 text-zinc-400 font-black tracking-widest uppercase text-sm md:text-base mb-4">
+              GENZ'S IPTV PLATFORM <span className="text-primary text-xl">➔</span>
+            </div>
+            <h1 className="text-7xl md:text-[10rem] font-black tracking-tighter leading-[0.9] mb-8 text-white">
+              IPGENZ
             </h1>
-            <p className="text-lg md:text-xl text-secondary-foreground font-medium mb-10 max-w-2xl mx-auto leading-relaxed">
-              Experience unparalleled streaming quality with native support for advanced codecs, seamless audio track switching, and on-the-fly transcoding.
+            <p className="text-lg md:text-2xl text-zinc-400 font-bold mb-12 max-w-4xl mx-auto leading-relaxed uppercase tracking-wide">
+              WE BLEND CINEMATIC DESIGN WITH LIGHTNING-FAST PERFORMANCE TO CREATE THE ULTIMATE STREAMING EXPERIENCE.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 mb-12">
@@ -198,25 +195,47 @@ export default function PremiumLandingPage() {
         </div>
       </div>
 
-      {/* Features Grid */}
-      <section id="features" className="py-32 px-6 max-w-7xl mx-auto">
-        <div className="text-center mb-20">
-          <h2 className="text-4xl md:text-5xl font-black mb-4">Everything You Need</h2>
-          <p className="text-secondary-foreground text-lg max-w-2xl mx-auto">
-            A premium streaming experience crafted with absolute attention to detail, designed to handle immense libraries without breaking a sweat.
-          </p>
-        </div>
+      {/* Modern Bento Features */}
+      <section id="features" className="py-24 px-6 max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-auto md:h-[700px]">
+          {/* Left Large Card */}
+          <div className="md:col-span-7 bg-[#141414] rounded-[2rem] border border-white/5 p-8 md:p-12 flex flex-col justify-between relative overflow-hidden group shadow-2xl">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+            <div className="relative z-10">
+              <h3 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tight">Universal Support</h3>
+              <p className="text-zinc-400 text-lg md:text-xl max-w-md font-medium leading-relaxed">Connect any provider natively including Xtream Codes, M3U, Stalker, and MAG without limits.</p>
+            </div>
+            <div className="relative z-10 w-full h-[300px] md:h-[400px] mt-10 rounded-2xl overflow-hidden border border-white/5 shadow-2xl">
+              <img src="/images/feature-universal.png" alt="Universal Support" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" />
+            </div>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <FeatureCard title="Universal Support" desc="Connect any provider natively." icon={<Server />} />
-          <FeatureCard title="Multi Profiles" desc="Personalized tracking per user." icon={<Users />} />
-          <FeatureCard title="Global Search" desc="Find anything instantly (Ctrl+K)." icon={<Search />} />
-          <FeatureCard title="Live TV EPG" desc="Lightning fast channel surfing." icon={<Tv />} />
-          <FeatureCard title="Rich Metadata" desc="Automated TMDB enrichment." icon={<Film />} />
-          <FeatureCard title="Smart Sync" desc="Lag-free incremental updates." icon={<Zap />} />
-          <FeatureCard title="Offline Downloads" desc="Watch without an internet connection." icon={<Download />} />
-          <FeatureCard title="Analytics" desc="Monitor platform health live." icon={<Activity />} />
-          <FeatureCard title="4K Streaming" desc="OLED optimized visual fidelity." icon={<MonitorPlay />} />
+          {/* Right Stacked Cards */}
+          <div className="md:col-span-5 flex flex-col gap-6">
+            {/* Top Right Card */}
+            <div className="flex-1 bg-[#141414] rounded-[2rem] border border-white/5 p-8 flex flex-col relative overflow-hidden group shadow-2xl">
+              <div className="absolute inset-0 bg-gradient-to-bl from-blue-600/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+              <div className="relative z-10 mb-6 flex-shrink-0">
+                <h3 className="text-3xl font-black text-white mb-2 tracking-tight">Live TV & EPG</h3>
+                <p className="text-zinc-400 font-medium">Lightning fast channel surfing.</p>
+              </div>
+              <div className="relative z-10 w-full flex-1 rounded-xl overflow-hidden border border-white/5 shadow-xl min-h-[150px]">
+                <img src="/images/feature-live.png" alt="Live TV" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" />
+              </div>
+            </div>
+
+            {/* Bottom Right Card */}
+            <div className="flex-1 bg-[#141414] rounded-[2rem] border border-white/5 p-8 flex flex-col relative overflow-hidden group shadow-2xl">
+              <div className="absolute inset-0 bg-gradient-to-tl from-purple-600/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+              <div className="relative z-10 mb-6 flex-shrink-0">
+                <h3 className="text-3xl font-black text-white mb-2 tracking-tight">Rich Metadata</h3>
+                <p className="text-zinc-400 font-medium">Automated TMDB enrichment.</p>
+              </div>
+              <div className="relative z-10 w-full flex-1 rounded-xl overflow-hidden border border-white/5 shadow-xl min-h-[150px]">
+                <img src="/images/feature-movies.png" alt="Movies" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" />
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -245,22 +264,6 @@ export default function PremiumLandingPage() {
         }
       `}} />
     </div>
-  )
-}
-
-function FeatureCard({ icon, title, desc }: { icon: React.ReactNode, title: string, desc: string }) {
-  return (
-    <motion.div 
-      whileHover={{ y: -5, scale: 1.02 }}
-      className="bg-card border border-white/5 rounded-2xl p-8 flex flex-col items-start transition-all hover:border-primary/50 hover:shadow-[0_0_30px_-15px_rgba(229,9,20,0.4)] group relative overflow-hidden"
-    >
-      <div className="absolute -right-10 -top-10 bg-primary/10 w-32 h-32 rounded-full blur-3xl group-hover:bg-primary/20 transition-colors" />
-      <div className="text-primary mb-6 p-3 bg-primary/10 rounded-xl">
-        {icon}
-      </div>
-      <h3 className="text-2xl font-bold mb-2 text-white">{title}</h3>
-      <p className="text-secondary-foreground font-medium">{desc}</p>
-    </motion.div>
   )
 }
 
