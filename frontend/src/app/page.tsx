@@ -19,6 +19,37 @@ const LinkedinIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 
+const MacWindow = ({ children }: { children: React.ReactNode }) => (
+  <div className="rounded-xl overflow-hidden border border-white/10 bg-[#000000] shadow-2xl">
+    <div className="h-8 bg-[#1E1E1E] border-b border-white/5 flex items-center px-4 gap-2">
+      <div className="w-3 h-3 rounded-full bg-[#FF5F56]" />
+      <div className="w-3 h-3 rounded-full bg-[#FFBD2E]" />
+      <div className="w-3 h-3 rounded-full bg-[#27C93F]" />
+    </div>
+    <div className="relative">
+      {children}
+    </div>
+  </div>
+)
+
+const BrowserFrame = ({ children, url = "ipgenz.vercel.app" }: { children: React.ReactNode, url?: string }) => (
+  <div className="rounded-xl overflow-hidden border border-white/10 bg-[#000000] shadow-2xl">
+    <div className="h-10 bg-[#1E1E1E] border-b border-white/5 flex items-center px-4 gap-4">
+      <div className="flex gap-2">
+        <div className="w-3 h-3 rounded-full bg-[#FF5F56]" />
+        <div className="w-3 h-3 rounded-full bg-[#FFBD2E]" />
+        <div className="w-3 h-3 rounded-full bg-[#27C93F]" />
+      </div>
+      <div className="bg-[#000000] rounded-md px-4 py-1 text-xs text-zinc-500 flex-1 max-w-sm border border-white/5 mx-auto text-center font-mono">
+        {url}
+      </div>
+    </div>
+    <div className="relative">
+      {children}
+    </div>
+  </div>
+)
+
 export default function PremiumLandingPage() {
   const router = useRouter()
   const [scrolled, setScrolled] = useState(false)
@@ -50,12 +81,12 @@ export default function PremiumLandingPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/30">
+    <div className="min-h-screen bg-[#050505] text-foreground font-sans selection:bg-primary/30">
       
       {/* Navigation Bar */}
       <header 
         className={`fixed top-0 w-full z-50 transition-all duration-300 h-[72px] flex items-center px-6 md:px-12 ${
-          scrolled ? "bg-background/80 backdrop-blur-md border-b border-white/10 shadow-2xl" : "bg-transparent"
+          scrolled ? "bg-[#050505]/80 backdrop-blur-xl border-b border-white/5 shadow-2xl" : "bg-transparent"
         }`}
       >
         <div className="flex items-center justify-between w-full max-w-7xl mx-auto">
@@ -65,8 +96,8 @@ export default function PremiumLandingPage() {
           </div>
           
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-secondary-foreground">
-            <a href="#features" className="hover:text-white transition">Features</a>
-            <a href="#showcase" className="hover:text-white transition">Platform</a>
+            <a href="#tour" className="hover:text-white transition">Product Tour</a>
+            <a href="https://github.com/gorantlasadwik/ipGenz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Changelog</a>
           </nav>
 
           <div className="flex items-center gap-6">
@@ -90,163 +121,200 @@ export default function PremiumLandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
-        {/* Modern Gradient Mesh Background */}
-        <div className="absolute inset-0 z-0 bg-black">
-          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/20 blur-[120px]" />
+      <section className="relative pt-40 pb-20 px-6 flex flex-col items-center justify-center overflow-hidden">
+        <div className="absolute inset-0 z-0 bg-[#050505]">
+          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/20 blur-[150px]" />
           <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] rounded-full bg-blue-600/10 blur-[150px]" />
-          <div className="absolute top-[20%] right-[20%] w-[30%] h-[30%] rounded-full bg-purple-600/10 blur-[100px]" />
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/50 z-10" />
+          <div className="absolute top-[20%] right-[20%] w-[30%] h-[30%] rounded-full bg-purple-600/10 blur-[150px]" />
         </div>
 
-        <div className="relative z-20 max-w-7xl mx-auto w-full px-6 md:px-12 flex flex-col items-center justify-center gap-8 mt-10 text-center">
+        <div className="relative z-20 max-w-5xl mx-auto w-full flex flex-col items-center text-center gap-6">
+          <span className="text-primary font-bold tracking-widest uppercase text-sm mb-2 px-4 py-1.5 rounded-full border border-primary/20 bg-primary/10">Powerful Features</span>
+          <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-[1.1] mb-2 text-white">
+            Everything you need. <br/>
+            Built for the <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-500">next generation.</span>
+          </h1>
+          <p className="text-lg md:text-xl text-zinc-400 font-medium mb-10 max-w-2xl mx-auto leading-relaxed">
+            IPGenz brings all your entertainment together with a powerful set of features designed for the ultimate streaming experience.
+          </p>
           
-          {/* Animated Badge */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 bg-white/5 backdrop-blur-md shadow-2xl"
-          >
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
-            </span>
-            <span className="text-xs font-semibold tracking-wide text-zinc-300 uppercase">The Ultimate Streaming Engine</span>
-          </motion.div>
-
-          <motion.div 
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.1, ease: "easeOut" }}
-            className="flex flex-col items-center"
-          >
-            <div className="flex items-center gap-4 text-zinc-400 font-black tracking-widest uppercase text-sm md:text-base mb-4">
-              GENZ'S IPTV PLATFORM <span className="text-primary text-xl">➔</span>
-            </div>
-            <h1 className="text-7xl md:text-[10rem] font-black tracking-tighter leading-[0.9] mb-8 text-white">
-              IPGENZ
-            </h1>
-            <p className="text-lg md:text-2xl text-zinc-400 font-bold mb-12 max-w-4xl mx-auto leading-relaxed uppercase tracking-wide">
-              WE BLEND CINEMATIC DESIGN WITH LIGHTNING-FAST PERFORMANCE TO CREATE THE ULTIMATE STREAMING EXPERIENCE.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row gap-4 mb-12">
-              <Link href="/signup" className="bg-white hover:bg-zinc-200 text-black px-8 py-4 rounded-full font-bold text-lg transition flex items-center justify-center gap-2 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] group">
-                <Play className="fill-black w-5 h-5 group-hover:scale-110 transition-transform" />
-                Start Watching
-              </Link>
-              <button 
-                onClick={handleDemoLogin}
-                disabled={isDemoLoading}
-                className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-full font-bold text-lg transition shadow-[0_0_30px_-5px_rgba(229,9,20,0.6)] flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <Sparkles className="w-5 h-5" />
-                {isDemoLoading ? "Loading Demo..." : "Experience the App"}
-              </button>
-            </div>
-
-            {/* Formats Marquee/List */}
-            <div className="flex flex-col items-center gap-4">
-              <span className="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Natively Supported Formats</span>
-              <div className="flex flex-wrap justify-center gap-3 max-w-3xl">
-                {['H.264', 'HEVC / H.265', 'AV1', 'VP9', 'MPEG-TS', 'M3U8 / HLS', 'DASH', 'AAC', 'MP3', 'AC-3', 'E-AC-3'].map((format) => (
-                  <span key={format} className="px-3 py-1.5 rounded-md bg-white/5 border border-white/10 text-xs font-bold text-zinc-300">
-                    {format}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Glowing Dashboard Preview */}
-          <motion.div 
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, delay: 0.3, ease: "easeOut" }}
-            className="w-full max-w-5xl mt-12 relative"
-          >
-            <div className="absolute -inset-1 bg-gradient-to-r from-primary via-blue-500 to-purple-600 rounded-2xl blur opacity-20" />
-            <div className="relative aspect-[16/9] w-full rounded-2xl border border-white/10 bg-[#0B0B0C] overflow-hidden shadow-2xl flex items-center justify-center">
-              <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=2525&auto=format&fit=crop')] bg-cover opacity-40 mix-blend-luminosity" />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0C] via-transparent to-transparent" />
-              
-              <div className="z-10 text-center flex flex-col items-center gap-6">
-                <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 shadow-2xl shadow-primary/20 animate-pulse">
-                  <MonitorPlay className="text-white w-8 h-8 ml-1" />
-                </div>
-                <div className="text-white font-bold tracking-widest uppercase text-sm">Interactive Cinematic UI</div>
-              </div>
-            </div>
-          </motion.div>
+          <div className="flex flex-col sm:flex-row gap-4 mb-8">
+            <Link href="/signup" className="bg-white hover:bg-zinc-200 text-black px-8 py-4 rounded-full font-bold text-lg transition flex items-center justify-center gap-2 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">
+              Start Free Trial
+            </Link>
+            <button 
+              onClick={handleDemoLogin}
+              disabled={isDemoLoading}
+              className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-full font-bold text-lg transition shadow-[0_0_30px_-5px_rgba(229,9,20,0.6)] flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Sparkles className="w-5 h-5" />
+              {isDemoLoading ? "Loading Demo..." : "Try Demo Instance"}
+            </button>
+          </div>
         </div>
       </section>
 
-      {/* Trust Banner Marquee */}
-      <div className="w-full border-y border-white/5 bg-surface/50 py-6 overflow-hidden flex items-center">
-        <div className="flex gap-16 whitespace-nowrap animate-[marquee_20s_linear_infinite] opacity-60 font-bold tracking-widest uppercase text-sm">
-          {['Xtream', 'M3U', 'Stalker', 'MAG', 'XML', 'JSON', 'HLS', 'DASH', 'RTSP', 'Xtream', 'M3U', 'Stalker', 'MAG', 'XML', 'JSON'].map((prov, i) => (
-            <span key={i} className="flex items-center gap-3">
-              <span className="w-2 h-2 rounded-full bg-primary" />
-              {prov}
-            </span>
-          ))}
-        </div>
+      {/* Guided Tour Sections */}
+      <div id="tour" className="max-w-7xl mx-auto px-6 py-20 flex flex-col gap-32">
+        
+        {/* Section 1: Universal Support */}
+        <motion.section 
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.8 }}
+          className="flex flex-col items-center text-center gap-8"
+        >
+          <div className="max-w-2xl">
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">Connect Any Provider</h2>
+            <p className="text-xl text-zinc-400 font-medium">Import and manage multiple IPTV providers from a single dashboard. Natively supports Xtream, M3U, MAG, and more.</p>
+          </div>
+          <div className="w-full max-w-5xl group perspective-1000">
+            <div className="transition-transform duration-700 ease-out group-hover:rotate-x-2 group-hover:rotate-y-[-2deg] group-hover:scale-[1.02]">
+              <MacWindow>
+                <img src="/images/providers page-v2.png" alt="Provider Dashboard" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+              </MacWindow>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Section 2: Global Search */}
+        <motion.section 
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.8 }}
+          className="flex flex-col items-center text-center gap-8"
+        >
+          <div className="max-w-2xl">
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">Search Everything</h2>
+            <p className="text-xl text-zinc-400 font-medium">Find content across every connected provider instantly. Unified results for movies, series, and live channels.</p>
+          </div>
+          <div className="w-full max-w-5xl group perspective-1000">
+            <div className="transition-transform duration-700 ease-out group-hover:rotate-x-[-2deg] group-hover:rotate-y-2 group-hover:scale-[1.02]">
+              <BrowserFrame>
+                <img src="/images/landing-v2.png" alt="Global Search" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+              </BrowserFrame>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Section 3: Movies */}
+        <motion.section 
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.8 }}
+          className="flex flex-col items-center text-center gap-8"
+        >
+          <div className="max-w-2xl">
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">A Premium Movie Experience</h2>
+            <p className="text-xl text-zinc-400 font-medium">Netflix-inspired browsing for IPTV movies. Automatically enriched with gorgeous backdrops and metadata.</p>
+          </div>
+          <div className="w-full max-w-5xl group perspective-1000">
+            <div className="transition-transform duration-700 ease-out group-hover:rotate-x-2 group-hover:rotate-y-[2deg] group-hover:scale-[1.02]">
+              <div className="rounded-[2rem] p-4 bg-[#141414] border border-white/10 shadow-2xl">
+                <div className="rounded-xl overflow-hidden border border-white/5">
+                  <img src="/images/movies-v2.png" alt="Movies Interface" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Section 4: Series */}
+        <motion.section 
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.8 }}
+          className="flex flex-col items-center text-center gap-8"
+        >
+          <div className="max-w-2xl">
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">Binge Without Limits</h2>
+            <p className="text-xl text-zinc-400 font-medium">Track seasons, episodes, and continue where you left off with flawless auto-play functionality.</p>
+          </div>
+          <div className="w-full max-w-5xl group perspective-1000">
+            <div className="transition-transform duration-700 ease-out group-hover:rotate-x-[-2deg] group-hover:rotate-y-[-2deg] group-hover:scale-[1.02]">
+              <BrowserFrame url="ipgenz.app/series/play">
+                <img src="/images/series-v2.png" alt="Series Interface" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+              </BrowserFrame>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Section 5: Live TV */}
+        <motion.section 
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.8 }}
+          className="flex flex-col items-center text-center gap-8"
+        >
+          <div className="max-w-2xl">
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">Live TV Reimagined</h2>
+            <p className="text-xl text-zinc-400 font-medium">Fast channel switching with full EPG integration. Never miss a game or breaking news.</p>
+          </div>
+          <div className="w-full max-w-6xl group perspective-1000">
+            <div className="transition-transform duration-700 ease-out group-hover:rotate-x-3 group-hover:scale-[1.03]">
+              <div className="rounded-[2.5rem] p-2 bg-gradient-to-b from-zinc-800 to-black border border-white/20 shadow-[0_30px_60px_-15px_rgba(0,0,0,1)]">
+                <div className="rounded-[2rem] overflow-hidden border border-black bg-black">
+                  <img src="/images/live tv-v2.png" alt="Live TV Interface" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Section 6: Player */}
+        <motion.section 
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.8 }}
+          className="flex flex-col items-center text-center gap-8"
+        >
+          <div className="max-w-2xl">
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">Built For Power Users</h2>
+            <p className="text-xl text-zinc-400 font-medium">Advanced playback controls rarely found in IPTV platforms. Multi-audio, subtitles, and hardware acceleration.</p>
+          </div>
+          <div className="w-full max-w-6xl group perspective-1000">
+            <div className="transition-transform duration-700 ease-out group-hover:scale-[1.04]">
+              <div className="rounded-3xl overflow-hidden border border-white/10 shadow-[0_0_50px_rgba(229,9,20,0.3)]">
+                <img src="/images/movie player example-v2.png" alt="Video Player" className="w-full h-auto object-cover" />
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Section 9: Admin Dashboard (Placeholder using sync progress for now) */}
+        <motion.section 
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.8 }}
+          className="flex flex-col items-center text-center gap-8"
+        >
+          <div className="max-w-2xl">
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">Complete Platform Control</h2>
+            <p className="text-xl text-zinc-400 font-medium">Manage the entire platform from a single dashboard. Automated background syncing keeps libraries fresh.</p>
+          </div>
+          <div className="w-full max-w-4xl group perspective-1000">
+            <div className="transition-transform duration-700 ease-out group-hover:rotate-x-2 group-hover:rotate-y-2 group-hover:scale-[1.02]">
+              <MacWindow>
+                <img src="/images/playlist syncing progress-v2.png" alt="Admin Dashboard Sync" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+              </MacWindow>
+            </div>
+          </div>
+        </motion.section>
+
       </div>
 
-      {/* Modern Bento Features */}
-      <section id="features" className="py-24 px-6 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-auto md:h-[700px]">
-          {/* Left Large Card */}
-          <div className="md:col-span-7 bg-[#141414] rounded-[2rem] border border-white/5 p-8 md:p-12 flex flex-col justify-between relative overflow-hidden group shadow-2xl">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-            <div className="relative z-10">
-              <h3 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tight">Universal Support</h3>
-              <p className="text-zinc-400 text-lg md:text-xl max-w-md font-medium leading-relaxed">Connect any provider natively including Xtream Codes, M3U, Stalker, and MAG without limits.</p>
-            </div>
-            <div className="relative z-10 w-full h-[300px] md:h-[400px] mt-10 rounded-2xl overflow-hidden border border-white/5 shadow-2xl">
-              <img src="/images/feature-universal.png" alt="Universal Support" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" />
-            </div>
-          </div>
-
-          {/* Right Stacked Cards */}
-          <div className="md:col-span-5 flex flex-col gap-6">
-            {/* Top Right Card */}
-            <div className="flex-1 bg-[#141414] rounded-[2rem] border border-white/5 p-8 flex flex-col relative overflow-hidden group shadow-2xl">
-              <div className="absolute inset-0 bg-gradient-to-bl from-blue-600/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-              <div className="relative z-10 mb-6 flex-shrink-0">
-                <h3 className="text-3xl font-black text-white mb-2 tracking-tight">Live TV & EPG</h3>
-                <p className="text-zinc-400 font-medium">Lightning fast channel surfing.</p>
-              </div>
-              <div className="relative z-10 w-full flex-1 rounded-xl overflow-hidden border border-white/5 shadow-xl min-h-[150px]">
-                <img src="/images/feature-live.png" alt="Live TV" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" />
-              </div>
-            </div>
-
-            {/* Bottom Right Card */}
-            <div className="flex-1 bg-[#141414] rounded-[2rem] border border-white/5 p-8 flex flex-col relative overflow-hidden group shadow-2xl">
-              <div className="absolute inset-0 bg-gradient-to-tl from-purple-600/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-              <div className="relative z-10 mb-6 flex-shrink-0">
-                <h3 className="text-3xl font-black text-white mb-2 tracking-tight">Rich Metadata</h3>
-                <p className="text-zinc-400 font-medium">Automated TMDB enrichment.</p>
-              </div>
-              <div className="relative z-10 w-full flex-1 rounded-xl overflow-hidden border border-white/5 shadow-xl min-h-[150px]">
-                <img src="/images/feature-movies.png" alt="Movies" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Platform Showcase (Tabs) */}
-      <PlatformShowcase />
-
       {/* Final CTA */}
-      <section className="relative py-32 px-6 flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/20 via-background to-background z-0" />
+      <section className="relative py-32 px-6 flex items-center justify-center overflow-hidden border-t border-white/5 bg-[#050505]">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent z-0" />
         <div className="relative z-10 text-center max-w-3xl mx-auto">
-          <h2 className="text-5xl md:text-6xl font-black mb-8 leading-tight">Ready To Build Your Entertainment Universe?</h2>
+          <h2 className="text-5xl md:text-6xl font-black mb-8 leading-tight text-white">Ready to transform your streaming?</h2>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/signup" className="bg-primary hover:bg-primary/90 text-white px-10 py-5 rounded-full font-bold text-xl transition shadow-[0_0_40px_-10px_rgba(229,9,20,0.8)]">
               Get Started Now
@@ -255,67 +323,16 @@ export default function PremiumLandingPage() {
         </div>
       </section>
 
-
-      {/* Custom Styles for Marquee */}
       <style dangerouslySetInnerHTML={{__html: `
-        @keyframes marquee {
-          0% { transform: translateX(0%); }
-          100% { transform: translateX(-50%); }
+        .perspective-1000 {
+          perspective: 1000px;
         }
+        .rotate-x-2 { transform: rotateX(2deg); }
+        .rotate-x-[-2deg] { transform: rotateX(-2deg); }
+        .rotate-y-2 { transform: rotateY(2deg); }
+        .rotate-y-[-2deg] { transform: rotateY(-2deg); }
+        .rotate-x-3 { transform: rotateX(3deg); }
       `}} />
     </div>
-  )
-}
-
-// Platform Showcase Component
-function PlatformShowcase() {
-  const tabs = ['Home', 'Movies', 'Live TV', 'Search', 'Profiles']
-  const [activeTab, setActiveTab] = useState('Home')
-
-  return (
-    <section id="showcase" className="py-32 px-6 max-w-6xl mx-auto">
-      <div className="text-center mb-16">
-        <h2 className="text-4xl md:text-5xl font-black mb-4">A Cinematic Experience</h2>
-        <p className="text-secondary-foreground text-lg">Every view meticulously crafted for maximum visual fidelity.</p>
-      </div>
-
-      <div className="flex justify-center mb-12">
-        <div className="bg-card border border-white/10 rounded-full p-2 flex flex-wrap justify-center gap-2">
-          {tabs.map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${
-                activeTab === tab 
-                  ? "bg-primary text-white shadow-lg" 
-                  : "text-secondary-foreground hover:text-white hover:bg-white/5"
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Mockup Display */}
-      <div className="relative w-full aspect-video bg-card border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex items-center justify-center">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            className="absolute inset-0 flex flex-col items-center justify-center p-10 text-center bg-[url('https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?q=80&w=2525&auto=format&fit=crop')] bg-cover bg-center"
-          >
-            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
-            <div className="relative z-10">
-              <h3 className="text-4xl font-black text-white mb-4">{activeTab} View</h3>
-              <p className="text-xl text-secondary-foreground">Interactive demo component rendering {activeTab} layout.</p>
-            </div>
-          </motion.div>
-        </AnimatePresence>
-      </div>
-    </section>
   )
 }
