@@ -765,7 +765,7 @@ export const VodPlayer: React.FC<VodPlayerProps> = ({
 
   // Format position times cleanly
   const formatTime = (secs: number) => {
-    if (isNaN(secs)) return '0:00'
+    if (isNaN(secs) || !isFinite(secs)) return '0:00'
     const h = Math.floor(secs / 3600)
     const m = Math.floor((secs % 3600) / 60)
     const s = Math.floor(secs % 60)
@@ -983,8 +983,8 @@ export const VodPlayer: React.FC<VodPlayerProps> = ({
             <input 
               type="range"
               min={0}
-              max={duration || 100}
-              value={currentTime}
+              max={isFinite(duration) && duration > 0 ? duration : 100}
+              value={isFinite(currentTime) ? currentTime : 0}
               onChange={handleSeek}
               className="flex-1 accent-primary bg-white/10 rounded-lg appearance-none h-1.5 cursor-pointer outline-none hover:bg-white/20 transition"
             />
