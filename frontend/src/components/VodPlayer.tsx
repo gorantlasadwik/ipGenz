@@ -606,12 +606,12 @@ export const VodPlayer: React.FC<VodPlayerProps> = ({
     }
 
     // Series Autoplay Trigger: 15s remaining
-    if (contentType === 'EPISODE' && nextEpisode && dur > 0 && (dur - cur <= 15)) {
+    if (contentType === 'EPISODE' && nextEpisode && duration > 0 && (duration - cur <= 15)) {
       if (autoplayCountdown === null) {
         setAutoplayCountdown(15)
       }
     } else {
-      if (autoplayCountdown !== null && (dur - cur > 15)) {
+      if (autoplayCountdown !== null && (duration - cur > 15)) {
         setAutoplayCountdown(null)
       }
     }
