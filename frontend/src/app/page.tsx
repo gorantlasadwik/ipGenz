@@ -140,7 +140,7 @@ export default function PremiumLandingPage() {
           
           <div className="flex flex-col sm:flex-row gap-4 mb-8">
             <Link href="/signup" className="bg-white hover:bg-zinc-200 text-black px-8 py-4 rounded-full font-bold text-lg transition flex items-center justify-center gap-2 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">
-              Start Free Trial
+              Get Started for Free
             </Link>
             <button 
               onClick={handleDemoLogin}
