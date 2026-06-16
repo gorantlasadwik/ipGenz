@@ -20,17 +20,13 @@ A modern, Netflix-inspired IPTV platform that unifies Live TV, Movies, and Serie
 
 ## 📸 Screenshots
 
-<div align="center">
-  <img src="docs/images/landing.png" alt="Landing Page" width="800"/>
-  <br/><br/>
-  <img src="docs/images/live-tv.png" alt="Live TV" width="800"/>
-  <br/><br/>
-  <img src="docs/images/movies.png" alt="Movies" width="800"/>
-  <br/><br/>
-  <img src="docs/images/series.png" alt="Series" width="800"/>
-  <br/><br/>
-  <img src="docs/images/providers.png" alt="Providers" width="800"/>
-</div>
+| Cinematic Dashboard & User Profiles | Live TV Channels & Inline Player |
+|---|---|
+| <img src="docs/images/landing.png" width="100%" /> | <img src="docs/images/live-tv.png" width="100%" /> |
+| **Movies Library & TMDB Enrichment** | **Series Management & Episode Tracking** |
+| <img src="docs/images/movies.png" width="100%" /> | <img src="docs/images/series.png" width="100%" /> |
+| **Provider Dashboard & Auto Sync** | |
+| <img src="docs/images/providers.png" width="100%" /> | |
 
 ---
 
