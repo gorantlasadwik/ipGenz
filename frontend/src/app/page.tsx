@@ -7,7 +7,7 @@ import { api } from "@/lib/api"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
   Tv, MonitorPlay, Film, Zap, Search, Users, 
-  Download, Activity, Server, ChevronDown, CheckCircle2, Play, Sparkles
+  Download, Activity, Server, ChevronDown, CheckCircle2, Play, Sparkles, Github, Linkedin
 } from "lucide-react"
 
 export default function PremiumLandingPage() {
@@ -61,6 +61,12 @@ export default function PremiumLandingPage() {
           </nav>
 
           <div className="flex items-center gap-6">
+            <a href="https://github.com/gorantlasadwik/ipGenz" target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-white hover:text-white/80 transition hidden lg:flex items-center gap-2">
+              <Github className="h-4 w-4" /> Star
+            </a>
+            <a href="https://www.linkedin.com/in/sadwik-gorantla-042362282/" target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-[#0A66C2] hover:brightness-110 transition hidden lg:flex items-center gap-2">
+              <Linkedin className="h-4 w-4" /> Connect
+            </a>
             <Link href="/login" className="text-sm font-bold text-white hover:text-white/80 transition hidden sm:block">
               Log In
             </Link>
