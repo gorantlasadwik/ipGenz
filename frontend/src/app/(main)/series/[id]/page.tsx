@@ -90,6 +90,7 @@ export default function SeriesDetailPage() {
           subtitle={`Season ${series.seasons?.find((s: any) => s.episodes?.some((e: any) => e.id === activeEpisode.id))?.seasonNumber || 1}, Episode ${activeEpisode.episodeNumber}: ${activeEpisode.title || activeEpisode.name || ''}`}
           onClose={() => setActiveEpisode(null)}
           seriesData={series}
+          durationSec={activeEpisode.duration}
           onPlayEpisode={(nextEp) => setActiveEpisode(nextEp)}
         />
       </div>

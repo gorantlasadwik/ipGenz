@@ -18,6 +18,7 @@ interface VodPlayerProps {
   onClose: () => void
   seriesData?: any          // Complete series object with seasons & episodes
   onPlayEpisode?: (episode: any) => void
+  durationSec?: number      // Fallback duration from backend if video duration is Infinity
 }
 
 function getPlaybackType(rawUrl: string | undefined, srcUrl: string | undefined, isTranscoding: boolean) {
@@ -41,7 +42,8 @@ export const VodPlayer: React.FC<VodPlayerProps> = ({
   subtitle,
   onClose,
   seriesData,
-  onPlayEpisode
+  onPlayEpisode,
+  durationSec
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -77,7 +79,11 @@ export const VodPlayer: React.FC<VodPlayerProps> = ({
   const [isFallback, setIsFallback] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
+  const [localDuration, setLocalDuration] = useState(0)
+  
+  // Computed duration: prefer local video duration unless it's Infinity (mpegts VOD bug), then fallback to backend durationSec
+  const duration = (localDuration && isFinite(localDuration)) ? localDuration : (durationSec || 0)
+  
   const [volume, setVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -593,9 +599,11 @@ export const VodPlayer: React.FC<VodPlayerProps> = ({
   const handleTimeUpdate = () => {
     if (!videoRef.current) return
     const cur = videoRef.current.currentTime
-    const dur = videoRef.current.duration || 0
+    const videoDur = videoRef.current.duration
     setCurrentTime(cur)
-    setDuration(dur)
+    if (videoDur && isFinite(videoDur)) {
+      setLocalDuration(videoDur)
+    }
 
     // Series Autoplay Trigger: 15s remaining
     if (contentType === 'EPISODE' && nextEpisode && dur > 0 && (dur - cur <= 15)) {
@@ -826,7 +834,11 @@ export const VodPlayer: React.FC<VodPlayerProps> = ({
       <video
         ref={videoRef}
         onTimeUpdate={handleTimeUpdate}
-        onDurationChange={() => setDuration(videoRef.current?.duration || 0)}
+        onDurationChange={() => {
+          if (videoRef.current?.duration && isFinite(videoRef.current.duration)) {
+            setLocalDuration(videoRef.current.duration)
+          }
+        }}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onClick={handlePlayPause}

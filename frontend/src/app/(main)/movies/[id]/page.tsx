@@ -88,6 +88,7 @@ export default function MovieDetailPage() {
           contentId={movie.id}
           title={movie.name}
           subtitle={movie.category?.name || "Movie"}
+          durationSec={movie.duration}
           onClose={() => setIsPlaying(false)}
         />
       </div>
