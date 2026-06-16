@@ -11,23 +11,30 @@ export class LibraryController {
   private async hydrateContent(items: any[]) {
     const result = [];
     for (const item of items) {
-      let meta = null;
+      let contentMeta = null;
       try {
         if (item.contentType === 'MOVIE') {
-          meta = await this.prisma.movie.findUnique({ where: { id: item.contentId }, select: { title: true, posterUrl: true } });
+          const meta = await this.prisma.movie.findUnique({ where: { id: item.contentId }, select: { name: true, poster: true } });
+          if (meta) contentMeta = { title: meta.name, posterUrl: meta.poster };
         } else if (item.contentType === 'SERIES') {
-          meta = await this.prisma.series.findUnique({ where: { id: item.contentId }, select: { title: true, posterUrl: true } });
+          const meta = await this.prisma.series.findUnique({ where: { id: item.contentId }, select: { name: true, poster: true } });
+          if (meta) contentMeta = { title: meta.name, posterUrl: meta.poster };
         } else if (item.contentType === 'CHANNEL') {
-          meta = await this.prisma.liveChannel.findUnique({ where: { id: item.contentId }, select: { title: true, logoUrl: true } });
+          const meta = await this.prisma.liveChannel.findUnique({ where: { id: item.contentId }, select: { name: true, logo: true } });
+          if (meta) contentMeta = { title: meta.name, logoUrl: meta.logo };
         } else if (item.contentType === 'EPISODE') {
-          meta = await this.prisma.episode.findUnique({ where: { id: item.contentId }, select: { title: true, posterUrl: true } });
+          const meta = await this.prisma.episode.findUnique({ 
+            where: { id: item.contentId }, 
+            include: { season: { include: { series: true } } } 
+          });
+          if (meta) contentMeta = { title: meta.title || `Episode ${meta.episodeNumber}`, posterUrl: meta.season?.series?.poster, seasonId: meta.seasonId };
         }
       } catch (e) {
         console.error('Error hydrating item:', item.contentId);
       }
 
-      if (meta) {
-        result.push({ ...item, content: meta });
+      if (contentMeta) {
+        result.push({ ...item, content: contentMeta });
       } else {
         result.push({ ...item, content: { title: `Unknown ${item.contentType}`, posterUrl: null, logoUrl: null } });
       }
