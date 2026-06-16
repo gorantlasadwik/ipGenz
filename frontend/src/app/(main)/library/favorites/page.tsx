@@ -43,18 +43,35 @@ export default function FavoritesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-          {favorites.map((fav: any) => (
-            <div key={fav.id} className="relative aspect-[2/3] rounded-lg overflow-hidden group border border-white/5 hover:border-white/20 transition-all hover:scale-105 bg-zinc-900">
-              <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-white/50">
-                {fav.contentType} {fav.contentId}
-              </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
-                <button className="bg-red-500/20 text-red-500 w-8 h-8 rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition self-end mb-2">
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
-          ))}
+          {favorites.map((fav: any) => {
+            const href = fav.contentType === 'MOVIE' ? `/movies/${fav.contentId}` :
+                         fav.contentType === 'SERIES' ? `/series/${fav.contentId}` :
+                         fav.contentType === 'EPISODE' ? `/series/${fav.content?.seasonId || ''}` :
+                         fav.contentType === 'CHANNEL' ? `/live` : '#';
+            return (
+              <Link href={href} key={fav.id} className="relative aspect-[2/3] rounded-lg overflow-hidden group border border-white/5 hover:border-white/20 transition-all hover:scale-105 bg-zinc-900 block">
+                {fav.content?.posterUrl || fav.content?.logoUrl ? (
+                  <img src={fav.content.posterUrl || fav.content.logoUrl} alt={fav.content.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-white/50 text-sm">
+                    {fav.content?.title || fav.contentId}
+                  </div>
+                )}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent p-4 flex flex-col justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      // TODO: Implement remove API
+                    }}
+                    className="bg-red-500/20 text-red-500 w-8 h-8 rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition self-end mb-2 relative z-10"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                  <p className="text-white font-bold text-sm truncate">{fav.content?.title}</p>
+                </div>
+              </Link>
+            )
+          })}
         </div>
       )}
     </div>

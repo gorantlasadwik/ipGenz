@@ -40,16 +40,30 @@ export default function HistoryPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-          {history.map((item: any) => (
-            <div key={item.id} className="relative aspect-video rounded-lg overflow-hidden group border border-white/5 hover:border-white/20 transition-all hover:scale-105 bg-zinc-900">
-              <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-white/50 text-sm">
-                {item.contentType} {item.contentId}
-              </div>
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <Play className="fill-white w-10 h-10" />
-              </div>
-            </div>
-          ))}
+          {history.map((item: any) => {
+            const href = item.contentType === 'MOVIE' ? `/movies/${item.contentId}` :
+                         item.contentType === 'SERIES' ? `/series/${item.contentId}` :
+                         item.contentType === 'EPISODE' ? `/series/${item.content?.seasonId || ''}` : // Fallback to series if known
+                         item.contentType === 'CHANNEL' ? `/live` : '#';
+
+            return (
+              <Link href={href} key={item.id} className="relative aspect-[2/3] rounded-lg overflow-hidden group border border-white/5 hover:border-white/20 transition-all hover:scale-105 bg-zinc-900 block">
+                {item.content?.posterUrl || item.content?.logoUrl ? (
+                  <img src={item.content.posterUrl || item.content.logoUrl} alt={item.content.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-white/50 text-sm">
+                    {item.content?.title || item.contentId}
+                  </div>
+                )}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-4 flex flex-col justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                  <p className="text-white font-bold text-sm truncate">{item.content?.title}</p>
+                </div>
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                  <Play className="fill-white w-10 h-10" />
+                </div>
+              </Link>
+            )
+          })}
         </div>
       )}
     </div>

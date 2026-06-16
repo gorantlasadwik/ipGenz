@@ -8,14 +8,42 @@ import { ContentType } from '@prisma/client';
 export class LibraryController {
   constructor(private prisma: PrismaService) {}
 
+  private async hydrateContent(items: any[]) {
+    const result = [];
+    for (const item of items) {
+      let meta = null;
+      try {
+        if (item.contentType === 'MOVIE') {
+          meta = await this.prisma.movie.findUnique({ where: { id: item.contentId }, select: { title: true, posterUrl: true } });
+        } else if (item.contentType === 'SERIES') {
+          meta = await this.prisma.series.findUnique({ where: { id: item.contentId }, select: { title: true, posterUrl: true } });
+        } else if (item.contentType === 'CHANNEL') {
+          meta = await this.prisma.liveChannel.findUnique({ where: { id: item.contentId }, select: { title: true, logoUrl: true } });
+        } else if (item.contentType === 'EPISODE') {
+          meta = await this.prisma.episode.findUnique({ where: { id: item.contentId }, select: { title: true, posterUrl: true } });
+        }
+      } catch (e) {
+        console.error('Error hydrating item:', item.contentId);
+      }
+
+      if (meta) {
+        result.push({ ...item, content: meta });
+      } else {
+        result.push({ ...item, content: { title: `Unknown ${item.contentType}`, posterUrl: null, logoUrl: null } });
+      }
+    }
+    return result;
+  }
+
   // ─── FAVORITES ─────────────────────────────────────────────────────────────
 
   @Get('favorites')
   async getFavorites(@Request() req: any, @Query('profileId') profileId: string) {
-    return this.prisma.favorite.findMany({
+    const favs = await this.prisma.favorite.findMany({
       where: { profileId, profile: { userId: req.user.userId } },
       orderBy: { createdAt: 'desc' },
     });
+    return this.hydrateContent(favs);
   }
 
   @Post('favorites')
@@ -43,10 +71,11 @@ export class LibraryController {
 
   @Get('watch-later')
   async getWatchLater(@Request() req: any, @Query('profileId') profileId: string) {
-    return this.prisma.watchLater.findMany({
+    const items = await this.prisma.watchLater.findMany({
       where: { profileId, profile: { userId: req.user.userId } },
       orderBy: { createdAt: 'desc' },
     });
+    return this.hydrateContent(items);
   }
 
   @Post('watch-later')
@@ -74,11 +103,12 @@ export class LibraryController {
 
   @Get('history')
   async getHistory(@Request() req: any, @Query('profileId') profileId: string) {
-    return this.prisma.watchHistory.findMany({
+    const items = await this.prisma.watchHistory.findMany({
       where: { profileId, profile: { userId: req.user.userId } },
       orderBy: { watchedAt: 'desc' },
       take: 50,
     });
+    return this.hydrateContent(items);
   }
 
   @Post('history')
@@ -144,7 +174,7 @@ export class LibraryController {
 
   @Get('playlists')
   async getPlaylists(@Request() req: any, @Query('profileId') profileId: string) {
-    return this.prisma.playlist.findMany({
+    const lists = await this.prisma.playlist.findMany({
       where: { profileId, profile: { userId: req.user.userId } },
       include: {
         items: true,
@@ -152,6 +182,13 @@ export class LibraryController {
       },
       orderBy: { createdAt: 'desc' },
     });
+    
+    const hydratedLists = [];
+    for (const list of lists) {
+      const hydratedItems = await this.hydrateContent(list.items);
+      hydratedLists.push({ ...list, items: hydratedItems });
+    }
+    return hydratedLists;
   }
 
   @Post('playlists')
