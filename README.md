@@ -162,22 +162,22 @@ Inspired by the industry titans: **Netflix, Apple TV, Disney+, and Plex**.
 ## 🛠 Technology Stack
 
 ### Frontend Application
-* **Framework:** Next.js 15 (App Router for maximum server-side rendering performance).
-* **Library:** React 19.
-* **Styling:** TailwindCSS with complex custom configuration.
-* **Components:** Custom-built accessible components inspired by `shadcn/ui`.
-* **Icons:** `lucide-react` for crisp, scalable vector graphics.
+* <img src="https://img.shields.io/badge/-Next.js-black?style=flat-square&logo=next.js&logoColor=white" /> **Framework:** Next.js 15 (App Router for maximum server-side rendering performance).
+* <img src="https://img.shields.io/badge/-React-61DAFB?style=flat-square&logo=react&logoColor=black" /> **Library:** React 19.
+* <img src="https://img.shields.io/badge/-TailwindCSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" /> **Styling:** TailwindCSS with complex custom configuration.
+* <img src="https://img.shields.io/badge/-shadcn%2Fui-000000?style=flat-square&logo=shadcnui&logoColor=white" /> **Components:** Custom-built accessible components inspired by `shadcn/ui`.
+* <img src="https://img.shields.io/badge/-Lucide-FF4785?style=flat-square" /> **Icons:** `lucide-react` for crisp, scalable vector graphics.
 
 ### Backend Application
-* **Framework:** NestJS (Node.js). Extremely modular, highly scalable enterprise framework.
-* **Database:** PostgreSQL (Hosted on Neon.tech/Supabase).
-* **ORM:** Prisma Client for type-safe database queries.
-* **Authentication:** JWT (JSON Web Tokens) with Passport.js.
-* **HTTP Client:** Axios for lightning-fast provider syncing.
+* <img src="https://img.shields.io/badge/-NestJS-E0234E?style=flat-square&logo=nestjs&logoColor=white" /> **Framework:** NestJS (Node.js). Extremely modular, highly scalable enterprise framework.
+* <img src="https://img.shields.io/badge/-PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" /> **Database:** PostgreSQL (Hosted on Neon.tech/Supabase).
+* <img src="https://img.shields.io/badge/-Prisma-2D3748?style=flat-square&logo=prisma&logoColor=white" /> **ORM:** Prisma Client for type-safe database queries.
+* <img src="https://img.shields.io/badge/-JWT-000000?style=flat-square&logo=jsonwebtokens&logoColor=white" /> **Authentication:** JWT (JSON Web Tokens) with Passport.js.
+* <img src="https://img.shields.io/badge/-Axios-5A29E4?style=flat-square&logo=axios&logoColor=white" /> **HTTP Client:** Axios for lightning-fast provider syncing.
 
 ### Infrastructure & Deployment
-* **Vercel:** Hosts the Next.js frontend, taking advantage of Edge caching and CDN global distribution.
-* **Render / Railway:** Hosts the Next.js backend, providing robust long-running processes for provider synchronization.
+* <img src="https://img.shields.io/badge/-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" /> **Vercel:** Hosts the Next.js frontend, taking advantage of Edge caching and CDN global distribution.
+* <img src="https://img.shields.io/badge/-Render-46E3B7?style=flat-square&logo=render&logoColor=white" /> **Render / Railway:** Hosts the Next.js backend, providing robust long-running processes for provider synchronization.
 
 ---
 
