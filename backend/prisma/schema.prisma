@@ -1,0 +1,424 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// USER MANAGEMENT & PROFILES
+// -----------------------------------------------------------------------------
+
+model User {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  passwordHash   String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  profiles       Profile[]
+  providers      Provider[]
+}
+
+enum ProfileType {
+  ADULT
+  CHILD
+}
+
+model Profile {
+  id                String             @id @default(uuid())
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name              String
+  avatar            String?
+  profileType       ProfileType        @default(ADULT)
+  pin               String?            // Optional for ADULT, mandatory for CHILD
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  favorites         Favorite[]
+  watchHistory      WatchHistory[]
+  continueWatching  ContinueWatching[]
+  watchLater        WatchLater[]
+  playlists         Playlist[]
+  searchHistory     SearchHistory[]
+  sessions          UserSession[]
+}
+
+model UserSession {
+  id             String    @id @default(uuid())
+  profileId      String
+  profile        Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  device         String
+  location       String?
+  ipAddress      String?
+  sessionToken   String    @unique
+  lastActiveAt   DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+}
+
+// -----------------------------------------------------------------------------
+// PROVIDERS
+// -----------------------------------------------------------------------------
+
+enum ProviderType {
+  XTREAM
+  M3U
+  STALKER
+  MAG
+  MINISTRA
+  CUSTOM
+}
+
+enum ProviderStatus {
+  ACTIVE
+  ERROR
+  SYNCING
+  OFFLINE
+}
+
+model Provider {
+  id                String          @id @default(uuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerType      ProviderType
+  providerName      String
+  serverUrl         String?
+  username          String?
+  encryptedPassword String?
+  playlistUrl       String?
+  status            ProviderStatus  @default(ACTIVE)
+  lastSyncAt        DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  liveCategories    LiveCategory[]
+  liveChannels      LiveChannel[]
+  movieCategories   MovieCategory[]
+  movies            Movie[]
+  seriesCategories  SeriesCategory[]
+  series            Series[]
+  streamProfiles    StreamProfile[]
+}
+
+// -----------------------------------------------------------------------------
+// LIVE TV
+// -----------------------------------------------------------------------------
+
+model LiveCategory {
+  id                 String        @id @default(uuid())
+  providerId         String
+  provider           Provider      @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  providerCategoryId String
+  name               String
+  createdAt          DateTime      @default(now())
+
+  channels           LiveChannel[]
+
+  @@unique([providerId, providerCategoryId])
+}
+
+model LiveChannel {
+  id                 String        @id @default(uuid())
+  providerId         String
+  provider           Provider      @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  liveCategoryId     String
+  category           LiveCategory  @relation(fields: [liveCategoryId], references: [id], onDelete: Cascade)
+  providerStreamId   String
+  name               String
+  logo               String?
+  streamUrl          String
+  epgId              String?
+  isActive           Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+
+  epgChannel         EpgChannel?   @relation(fields: [epgId], references: [id])
+}
+
+// -----------------------------------------------------------------------------
+// MOVIES
+// -----------------------------------------------------------------------------
+
+model MovieCategory {
+  id                 String    @id @default(uuid())
+  providerId         String
+  provider           Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  providerCategoryId String
+  name               String
+  createdAt          DateTime  @default(now())
+
+  movies             Movie[]
+
+  @@unique([providerId, providerCategoryId])
+}
+
+model Movie {
+  id                 String        @id @default(uuid())
+  providerId         String
+  provider           Provider      @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  movieCategoryId    String
+  category           MovieCategory @relation(fields: [movieCategoryId], references: [id], onDelete: Cascade)
+  providerStreamId   String
+  name               String
+  poster             String?
+  backdrop           String?
+  description        String?
+  year               Int?
+  rating             Float?
+  duration           Int?          // seconds
+  streamUrl          String
+  createdAt          DateTime      @default(now())
+
+  @@unique([providerId, providerStreamId])
+}
+
+// -----------------------------------------------------------------------------
+// SERIES
+// -----------------------------------------------------------------------------
+
+model SeriesCategory {
+  id                 String    @id @default(uuid())
+  providerId         String
+  provider           Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  providerCategoryId String
+  name               String
+  createdAt          DateTime  @default(now())
+
+  series             Series[]
+
+  @@unique([providerId, providerCategoryId])
+}
+
+model Series {
+  id                 String         @id @default(uuid())
+  providerId         String
+  provider           Provider       @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  seriesCategoryId   String
+  category           SeriesCategory @relation(fields: [seriesCategoryId], references: [id], onDelete: Cascade)
+  providerSeriesId   String
+  name               String
+  poster             String?
+  backdrop           String?
+  description        String?
+  year               Int?
+  createdAt          DateTime       @default(now())
+
+  seasons            Season[]
+
+  @@unique([providerId, providerSeriesId])
+}
+
+model Season {
+  id             String    @id @default(uuid())
+  seriesId       String
+  series         Series    @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  seasonNumber   Int
+  name           String?
+
+  episodes       Episode[]
+
+  @@unique([seriesId, seasonNumber])
+}
+
+model Episode {
+  id                String   @id @default(uuid())
+  seriesId          String
+  seasonId          String
+  season            Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  providerEpisodeId String
+  episodeNumber     Int
+  title             String?
+  description       String?
+  streamUrl         String
+  duration          Int?     // seconds
+
+  @@unique([seriesId, providerEpisodeId])
+}
+
+// -----------------------------------------------------------------------------
+// EPG
+// -----------------------------------------------------------------------------
+
+model EpgChannel {
+  id             String        @id @default(uuid())
+  providerId     String
+  epgId          String        // usually the channel id in the XMLTV
+  channelName    String
+
+  programs       EpgProgram[]
+  liveChannels   LiveChannel[]
+
+  @@unique([providerId, epgId])
+}
+
+model EpgProgram {
+  id             String      @id @default(uuid())
+  epgChannelId   String
+  epgChannel     EpgChannel  @relation(fields: [epgChannelId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  startTime      DateTime
+  endTime        DateTime
+}
+
+// -----------------------------------------------------------------------------
+// USER DATA & PERSONALIZATION
+// -----------------------------------------------------------------------------
+
+enum ContentType {
+  MOVIE
+  SERIES
+  EPISODE
+  CHANNEL
+}
+
+model Favorite {
+  id             String      @id @default(uuid())
+  profileId      String
+  profile        Profile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  contentType    ContentType
+  contentId      String
+  createdAt      DateTime    @default(now())
+}
+
+model WatchLater {
+  id             String      @id @default(uuid())
+  profileId      String
+  profile        Profile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  contentType    ContentType
+  contentId      String
+  createdAt      DateTime    @default(now())
+}
+
+model WatchHistory {
+  id             String      @id @default(uuid())
+  profileId      String
+  profile        Profile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  contentType    ContentType
+  contentId      String
+  watchedAt      DateTime    @default(now())
+}
+
+model ContinueWatching {
+  id               String      @id @default(uuid())
+  profileId        String
+  profile          Profile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  contentType      ContentType
+  contentId        String
+  positionSeconds  Int
+  durationSeconds  Int?
+  lastWatched      DateTime    @default(now())
+
+  @@unique([profileId, contentId, contentType])
+}
+
+model Playlist {
+  id             String         @id @default(uuid())
+  profileId      String
+  profile        Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  createdAt      DateTime       @default(now())
+
+  items          PlaylistItem[]
+}
+
+model PlaylistItem {
+  id             String      @id @default(uuid())
+  playlistId     String
+  playlist       Playlist    @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  contentType    ContentType
+  contentId      String
+  position       Int
+}
+
+model SearchHistory {
+  id             String      @id @default(uuid())
+  profileId      String
+  profile        Profile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  query          String
+  searchedAt     DateTime    @default(now())
+}
+
+// -----------------------------------------------------------------------------
+// ADMIN & OBSERVABILITY
+// -----------------------------------------------------------------------------
+
+enum AdminRole {
+  MODERATOR
+  ADMIN
+  SUPER_ADMIN
+  OWNER
+}
+
+model AdminUser {
+  id             String         @id @default(uuid())
+  email          String         @unique
+  passwordHash   String
+  role           AdminRole      @default(MODERATOR)
+  createdAt      DateTime       @default(now())
+
+  sessions       AdminSession[]
+  auditLogs      AuditLog[]
+}
+
+model AdminSession {
+  id             String      @id @default(uuid())
+  adminId        String
+  admin          AdminUser   @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  sessionToken   String      @unique
+  createdAt      DateTime    @default(now())
+}
+
+model AuditLog {
+  id             String      @id @default(uuid())
+  actorId        String?
+  adminActor     AdminUser?  @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action         String
+  target         String
+  createdAt      DateTime    @default(now())
+}
+
+// Additional Observability tables like SystemMetrics, ProviderMetrics,
+// ErrorLogs, SearchMetrics can be added or stored in a time-series DB or Redis.
+
+model StreamProfile {
+  id                   String      @id @default(uuid())
+  providerId           String
+  provider             Provider    @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  contentType          ContentType
+  contentId            String
+  
+  // Video Information
+  videoCodec           String?
+  resolution           String?
+  fps                  Float?
+  bitrate              Int?
+  
+  // Audio Information
+  audioCodec           String?
+  audioChannels        Int?
+  audioLanguage        String?
+  
+  // Subtitle Information
+  subtitleFormats      String?
+  
+  // Compatibility
+  browserSupported     Boolean     @default(true)
+  transcodingRequired  Boolean     @default(false)
+  transcodeType        String?     // "AUDIO", "VIDEO", "NONE"
+  
+  // Health
+  isBroken             Boolean     @default(false)
+  lastCheckedAt        DateTime    @default(now())
+  
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@unique([contentType, contentId])
+}
+

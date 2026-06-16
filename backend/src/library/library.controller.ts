@@ -1,0 +1,196 @@
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ContentType } from '@prisma/client';
+
+@Controller('library')
+@UseGuards(JwtAuthGuard)
+export class LibraryController {
+  constructor(private prisma: PrismaService) {}
+
+  // ─── FAVORITES ─────────────────────────────────────────────────────────────
+
+  @Get('favorites')
+  async getFavorites(@Request() req: any, @Query('profileId') profileId: string) {
+    return this.prisma.favorite.findMany({
+      where: { profileId, profile: { userId: req.user.userId } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  @Post('favorites')
+  async addFavorite(@Request() req: any, @Body() body: { profileId: string; contentType: ContentType; contentId: string }) {
+    const profile = await this.prisma.profile.findFirst({ where: { id: body.profileId, userId: req.user.userId } });
+    if (!profile) throw new Error('Profile not found or access denied');
+    
+    return this.prisma.favorite.create({
+      data: {
+        profileId: body.profileId,
+        contentType: body.contentType,
+        contentId: body.contentId,
+      },
+    });
+  }
+
+  @Delete('favorites/:id')
+  async removeFavorite(@Request() req: any, @Param('id') id: string) {
+    const fav = await this.prisma.favorite.findFirst({ where: { id, profile: { userId: req.user.userId } } });
+    if (!fav) throw new Error('Not found');
+    return this.prisma.favorite.delete({ where: { id } });
+  }
+
+  // ─── WATCH LATER ───────────────────────────────────────────────────────────
+
+  @Get('watch-later')
+  async getWatchLater(@Request() req: any, @Query('profileId') profileId: string) {
+    return this.prisma.watchLater.findMany({
+      where: { profileId, profile: { userId: req.user.userId } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  @Post('watch-later')
+  async addWatchLater(@Request() req: any, @Body() body: { profileId: string; contentType: ContentType; contentId: string }) {
+    const profile = await this.prisma.profile.findFirst({ where: { id: body.profileId, userId: req.user.userId } });
+    if (!profile) throw new Error('Profile not found or access denied');
+    
+    return this.prisma.watchLater.create({
+      data: {
+        profileId: body.profileId,
+        contentType: body.contentType,
+        contentId: body.contentId,
+      },
+    });
+  }
+
+  @Delete('watch-later/:id')
+  async removeWatchLater(@Request() req: any, @Param('id') id: string) {
+    const wl = await this.prisma.watchLater.findFirst({ where: { id, profile: { userId: req.user.userId } } });
+    if (!wl) throw new Error('Not found');
+    return this.prisma.watchLater.delete({ where: { id } });
+  }
+
+  // ─── HISTORY ───────────────────────────────────────────────────────────────
+
+  @Get('history')
+  async getHistory(@Request() req: any, @Query('profileId') profileId: string) {
+    return this.prisma.watchHistory.findMany({
+      where: { profileId, profile: { userId: req.user.userId } },
+      orderBy: { watchedAt: 'desc' },
+      take: 50,
+    });
+  }
+
+  @Post('history')
+  async addHistory(@Request() req: any, @Body() body: { profileId: string; contentType: ContentType; contentId: string }) {
+    const profile = await this.prisma.profile.findFirst({ where: { id: body.profileId, userId: req.user.userId } });
+    if (!profile) throw new Error('Profile not found or access denied');
+    
+    return this.prisma.watchHistory.create({
+      data: {
+        profileId: body.profileId,
+        contentType: body.contentType,
+        contentId: body.contentId,
+      },
+    });
+  }
+
+  // ─── CONTINUE WATCHING ────────────────────────────────────────────────────
+
+  @Get('continue-watching')
+  async getContinueWatching(@Request() req: any, @Query('profileId') profileId: string) {
+    return this.prisma.continueWatching.findMany({
+      where: { profileId, profile: { userId: req.user.userId } },
+      orderBy: { lastWatched: 'desc' },
+      take: 20,
+    });
+  }
+
+  @Post('continue-watching')
+  async upsertContinueWatching(@Request() req: any, @Body() body: {
+    profileId: string;
+    contentType: ContentType;
+    contentId: string;
+    positionSeconds: number;
+    durationSeconds?: number;
+  }) {
+    const profile = await this.prisma.profile.findFirst({ where: { id: body.profileId, userId: req.user.userId } });
+    if (!profile) throw new Error('Profile not found or access denied');
+    
+    return this.prisma.continueWatching.upsert({
+      where: {
+        profileId_contentId_contentType: {
+          profileId: body.profileId,
+          contentId: body.contentId,
+          contentType: body.contentType,
+        },
+      },
+      update: {
+        positionSeconds: body.positionSeconds,
+        durationSeconds: body.durationSeconds,
+        lastWatched: new Date(),
+      },
+      create: {
+        profileId: body.profileId,
+        contentType: body.contentType,
+        contentId: body.contentId,
+        positionSeconds: body.positionSeconds,
+        durationSeconds: body.durationSeconds,
+      },
+    });
+  }
+
+  // ─── PLAYLISTS ─────────────────────────────────────────────────────────────
+
+  @Get('playlists')
+  async getPlaylists(@Request() req: any, @Query('profileId') profileId: string) {
+    return this.prisma.playlist.findMany({
+      where: { profileId, profile: { userId: req.user.userId } },
+      include: {
+        items: true,
+        _count: { select: { items: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  @Post('playlists')
+  async createPlaylist(@Request() req: any, @Body() body: { profileId: string; name: string; description?: string }) {
+    const profile = await this.prisma.profile.findFirst({ where: { id: body.profileId, userId: req.user.userId } });
+    if (!profile) throw new Error('Profile not found or access denied');
+    
+    return this.prisma.playlist.create({
+      data: {
+        profileId: body.profileId,
+        name: body.name,
+        description: body.description,
+      },
+    });
+  }
+
+  @Post('playlists/:id/items')
+  async addToPlaylist(@Request() req: any, @Param('id') playlistId: string, @Body() body: {
+    contentType: ContentType;
+    contentId: string;
+    position: number;
+  }) {
+    const pl = await this.prisma.playlist.findFirst({ where: { id: playlistId, profile: { userId: req.user.userId } } });
+    if (!pl) throw new Error('Playlist not found');
+    
+    return this.prisma.playlistItem.create({
+      data: {
+        playlistId,
+        contentType: body.contentType,
+        contentId: body.contentId,
+        position: body.position,
+      },
+    });
+  }
+
+  @Delete('playlists/:id')
+  async deletePlaylist(@Request() req: any, @Param('id') id: string) {
+    const pl = await this.prisma.playlist.findFirst({ where: { id, profile: { userId: req.user.userId } } });
+    if (!pl) throw new Error('Not found');
+    return this.prisma.playlist.delete({ where: { id } });
+  }
+}
