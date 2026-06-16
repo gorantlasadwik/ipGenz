@@ -132,27 +132,7 @@ ipGenz features a secure **Demo Mode** (`demo@ipgenz.com`).
 
 ---
 
-## 📊 Sadwik Admin Panel (Observability)
 
-Route: `/sadwik`
-
-The integrated admin observability portal provides extreme visibility into the health of the ipGenz platform.
-
-### User Management
-* View all registered users.
-* Track total active providers.
-* Manage access roles.
-
-### Platform Health & Metrics
-* **Total Database Counts:** Real-time visibility into the exact number of indexed Movies, Series, and Channels across the platform.
-* **Storage Metrics:** Live tracking of PostgreSQL database size.
-
-### System Infrastructure Monitoring
-* **CPU Usage:** Live telemetry via `os.loadavg()`.
-* **RAM Usage:** Live heap and physical memory usage analytics.
-* **System Uptime:** Tracks the Node.js process uptime dynamically.
-
----
 
 ## 🎨 UI Philosophy
 
