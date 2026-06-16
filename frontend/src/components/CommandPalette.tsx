@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import {
   Search,
   Tv,
@@ -28,6 +29,14 @@ import {
 
 export function CommandPalette() {
   const [open, setOpen] = React.useState(false)
+  const router = useRouter()
+
+  const handleLogout = () => {
+    localStorage.removeItem("token")
+    localStorage.removeItem("profileId")
+    localStorage.removeItem("isDemo")
+    router.push("/login")
+  }
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -97,7 +106,7 @@ export function CommandPalette() {
               <span>Settings</span>
               <CommandShortcut>⌘S</CommandShortcut>
             </CommandItem>
-            <CommandItem>
+            <CommandItem onSelect={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               <span>Logout</span>
             </CommandItem>

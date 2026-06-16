@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   Home,
   Tv,
@@ -20,6 +20,14 @@ import {
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+
+  const handleLogout = () => {
+    localStorage.removeItem("token")
+    localStorage.removeItem("profileId")
+    localStorage.removeItem("isDemo")
+    router.push("/login")
+  }
 
   return (
     <aside className="w-64 border-r border-border bg-card flex flex-col h-screen fixed left-0 top-0 z-40">
@@ -54,7 +62,7 @@ export function Sidebar() {
         <nav className="space-y-1">
           <SidebarItem href="/settings" icon={<Settings size={20} />} label="Settings" active={pathname === "/settings"} />
           <SidebarItem href="/profiles" icon={<User size={20} />} label="Switch Profile" active={pathname === "/profiles"} />
-          <button className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
             <LogOut size={20} />
             Logout
           </button>
