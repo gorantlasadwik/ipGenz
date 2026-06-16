@@ -22,13 +22,13 @@ A modern, Netflix-inspired IPTV platform that unifies Live TV, Movies, and Serie
 
 | Cinematic Dashboard | Live TV Channels |
 |---|---|
-| <img src="docs/images/landing.png" width="100%" /> | <img src="docs/images/live tv.png" width="100%" /> |
+| <img src="docs/images/landing-v2.png" width="100%" /> | <img src="docs/images/live tv-v2.png" width="100%" /> |
 | **Movies Library** | **Series Management** |
-| <img src="docs/images/movies.png" width="100%" /> | <img src="docs/images/series.png" width="100%" /> |
+| <img src="docs/images/movies-v2.png" width="100%" /> | <img src="docs/images/series-v2.png" width="100%" /> |
 | **Live TV Streaming Player** | **Movie Player Example** |
-| <img src="docs/images/live tv screaming player.png" width="100%" /> | <img src="docs/images/movie player example.png" width="100%" /> |
+| <img src="docs/images/live tv screaming player-v2.png" width="100%" /> | <img src="docs/images/movie player example-v2.png" width="100%" /> |
 | **Provider Dashboard** | **Playlist Syncing Progress** |
-| <img src="docs/images/providers page.png" width="100%" /> | <img src="docs/images/playlist syncing progress.png" width="100%" /> |
+| <img src="docs/images/providers page-v2.png" width="100%" /> | <img src="docs/images/playlist syncing progress-v2.png" width="100%" /> |
 
 ---
 
