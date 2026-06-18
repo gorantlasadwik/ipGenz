@@ -189,6 +189,11 @@ export class M3UAdapter implements ProviderAdapter {
     return this.movies;
   }
 
+  async getMovieInfo(movieId: string): Promise<Partial<InternalMovie>> {
+    await this.parsePlaylist();
+    return {};
+  }
+
   async getSeriesCategories(): Promise<InternalSeriesCategory[]> {
     await this.parsePlaylist();
     return this.seriesCategories;
@@ -197,6 +202,11 @@ export class M3UAdapter implements ProviderAdapter {
   async getSeries(): Promise<InternalSeries[]> {
     await this.parsePlaylist();
     return this.seriesList;
+  }
+
+  async getSeriesInfo(seriesId: string): Promise<Partial<InternalSeries>> {
+    await this.parsePlaylist();
+    return {};
   }
 
   async getEpisodes(seriesId: string): Promise<InternalEpisode[]> {
