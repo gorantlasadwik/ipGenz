@@ -28,11 +28,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   // Compute isMpegTs synchronously during render
   const firstSource = options.sources?.[0]
   const rawSourceUrl = firstSource?.src || ''
-  // For mpegts.js (live TV), audio switching is done client-side via mpegts.js API.
-  // We only append audioTrack to the URL for Video.js streams (VOD) that need backend transcoding.
-  const sourceUrl = rawSourceUrl
+  // Browser-native audio codecs (no transcoding needed)
+  const BROWSER_NATIVE_AUDIO = ['AAC', 'MP3', 'OPUS', 'VORBIS']
+  // When a non-native audio codec is detected (AC3, MP2, etc.) OR a specific audio track is
+  // requested, we must transcode via backend. Append audioTrack param to trigger FFmpeg.
+  const sourceUrl = selectedAudioTrackId !== null || isTranscodingRequired
+    ? `${rawSourceUrl}${rawSourceUrl.includes('?') ? '&' : '?'}audioTrack=${selectedAudioTrackId ?? 0}`
+    : rawSourceUrl
   const sourceType = firstSource?.type || ''
-  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || isTranscodingRequired
+  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || isTranscodingRequired || selectedAudioTrackId !== null
 
   // Parse MPEG-TS PMT tables from raw stream bytes to detect audio tracks client-side.
   // This runs entirely in the browser using the user's home IP - no backend needed!
@@ -155,12 +159,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             console.log('[VideoPlayer] Backend returned no audio tracks, falling back to client-side PMT parsing...')
             const parsed = await parseMpegTsAudioFromStream(rawSourceUrl)
             if (parsed.length > 0) {
-              console.log(`[VideoPlayer] Client-side PMT parser found ${parsed.length} audio stream(s)`)
+              console.log(`[VideoPlayer] Client-side PMT parser found ${parsed.length} audio stream(s):`, parsed)
               setAudioTracks(parsed.map(s => ({
                 id: s.id,
                 label: `Track ${s.id + 1} (${s.language.toUpperCase()}) [${s.codec}]`,
                 active: s.id === 0
               })))
+              // If ANY detected audio codec is non-native, we must transcode via backend
+              const needsTranscode = parsed.some(s => !BROWSER_NATIVE_AUDIO.includes(s.codec.toUpperCase()))
+              if (needsTranscode) {
+                console.log('[VideoPlayer] Non-native audio codec detected, enabling backend transcoding...')
+                setIsTranscodingRequired(true)
+              }
             }
           }
           if (data && data.transcodingRequired) {
@@ -176,6 +186,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
               label: `Track ${s.id + 1} (${s.language.toUpperCase()}) [${s.codec}]`,
               active: s.id === 0
             })))
+            const needsTranscode = parsed.some(s => !BROWSER_NATIVE_AUDIO.includes(s.codec.toUpperCase()))
+            if (needsTranscode) {
+              console.log('[VideoPlayer] Non-native audio codec detected, enabling backend transcoding...')
+              setIsTranscodingRequired(true)
+            }
           }
         });
     }
