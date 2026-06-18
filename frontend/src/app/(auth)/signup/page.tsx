@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { api } from "@/lib/api"
 
 export default function SignupPage() {
   const router = useRouter()
@@ -18,15 +19,7 @@ export default function SignupPage() {
     setError("")
 
     try {
-      const res = await fetch("http://localhost:3001/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      })
-
-      if (!res.ok) {
-        throw new Error("Failed to sign up")
-      }
+      await api.register(email, password)
 
       // Assume the backend returns the user or token, for now just redirect to login
       router.push("/login")

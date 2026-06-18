@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { api } from "@/lib/api"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,17 +18,7 @@ export default function LoginPage() {
     setError("")
 
     try {
-      const res = await fetch("http://localhost:3001/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      })
-
-      if (!res.ok) {
-        throw new Error("Invalid credentials")
-      }
-
-      const data = await res.json()
+      const data = await api.login(email, password)
       // In a real app, store data.access_token securely (e.g., HTTP-only cookie or localStorage for dev)
       localStorage.setItem("token", data.access_token)
       if (data.user?.isDemo) {
