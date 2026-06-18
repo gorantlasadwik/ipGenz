@@ -34,28 +34,150 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   const sourceType = firstSource?.type || ''
   const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || isTranscodingRequired
 
-  // Reset states when the stream source changes and fetch tracks from backend
+  // Parse MPEG-TS PMT tables from raw stream bytes to detect audio tracks client-side.
+  // This runs entirely in the browser using the user's home IP - no backend needed!
+  const parseMpegTsAudioFromStream = async (streamUrl: string): Promise<Array<{id: number, language: string, codec: string}>> => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    try {
+      const response = await fetch(streamUrl, { signal: controller.signal })
+      const reader = response.body?.getReader()
+      if (!reader) return []
+
+      let buffer = new Uint8Array(0)
+      const MAX_BYTES = 65536 // 64KB is enough to find PAT/PMT
+
+      while (buffer.length < MAX_BYTES) {
+        const { done, value } = await reader.read()
+        if (done || !value) break
+        const merged = new Uint8Array(buffer.length + value.length)
+        merged.set(buffer)
+        merged.set(value, buffer.length)
+        buffer = merged
+        if (buffer.length >= MAX_BYTES) break
+      }
+      reader.cancel()
+      clearTimeout(timeoutId)
+
+      // Parse MPEG-TS packets (188 bytes each, starts with 0x47 sync byte)
+      let pmtPid = -1
+      const audioStreams: Array<{id: number, language: string, codec: string}> = []
+
+      for (let i = 0; i + 188 <= buffer.length; i += 188) {
+        if (buffer[i] !== 0x47) { // seek sync byte
+          for (let j = i; j < i + 188; j++) {
+            if (buffer[j] === 0x47) { i = j - 188; break }
+          }
+          continue
+        }
+        const pid = ((buffer[i + 1] & 0x1F) << 8) | buffer[i + 2]
+        const adaptFieldCtrl = (buffer[i + 3] & 0x30) >> 4
+        let payloadOffset = i + 4
+        if (adaptFieldCtrl === 2) continue // adaptation only, no payload
+        if (adaptFieldCtrl === 3) payloadOffset += (buffer[payloadOffset] + 1) // skip adaptation field
+        const pusi = (buffer[i + 1] & 0x40) !== 0 // payload unit start indicator
+
+        if (pid === 0 && pusi && pmtPid === -1) {
+          // PAT: find PMT PID for program 1
+          const ptrField = buffer[payloadOffset]
+          const sectionBase = payloadOffset + 1 + ptrField
+          const secLen = ((buffer[sectionBase + 1] & 0x0F) << 8) | buffer[sectionBase + 2]
+          for (let j = sectionBase + 8; j < sectionBase + 3 + secLen - 4; j += 4) {
+            const progNum = (buffer[j] << 8) | buffer[j + 1]
+            if (progNum !== 0) { pmtPid = ((buffer[j + 2] & 0x1F) << 8) | buffer[j + 3]; break }
+          }
+        } else if (pid === pmtPid && pusi && audioStreams.length === 0) {
+          // PMT: enumerate all audio stream entries
+          const ptrField = buffer[payloadOffset]
+          const sectionBase = payloadOffset + 1 + ptrField
+          const secLen = ((buffer[sectionBase + 1] & 0x0F) << 8) | buffer[sectionBase + 2]
+          const pcrPid = ((buffer[sectionBase + 8] & 0x1F) << 8) | buffer[sectionBase + 9]
+          const progInfoLen = ((buffer[sectionBase + 10] & 0x0F) << 8) | buffer[sectionBase + 11]
+          let k = sectionBase + 12 + progInfoLen
+          let audioIdx = 0
+          while (k < sectionBase + 3 + secLen - 4) {
+            const streamType = buffer[k]
+            const esPid = ((buffer[k + 1] & 0x1F) << 8) | buffer[k + 2]
+            const esInfoLen = ((buffer[k + 3] & 0x0F) << 8) | buffer[k + 4]
+            // Audio types: 0x03=MPEG-1, 0x04=MPEG-2, 0x0F=AAC, 0x11=MPEG-4, 0x81=AC-3, 0x87=E-AC-3
+            const isAudio = [0x03, 0x04, 0x0F, 0x11, 0x81, 0x06, 0x87].includes(streamType)
+            if (isAudio) {
+              let lang = 'und'
+              const codecName = streamType === 0x0F || streamType === 0x11 ? 'AAC'
+                : streamType === 0x03 || streamType === 0x04 ? 'MP2'
+                : streamType === 0x81 ? 'AC3' : 'AUDIO'
+              // Scan ES descriptors for ISO 639 language descriptor (tag 0x0A)
+              for (let d = k + 5; d < k + 5 + esInfoLen - 1; ) {
+                const descTag = buffer[d], descLen = buffer[d + 1]
+                if (descTag === 0x0A && descLen >= 3) {
+                  lang = String.fromCharCode(buffer[d + 2], buffer[d + 3], buffer[d + 4]).replace(/[^\x20-\x7E]/g, '')
+                }
+                d += 2 + descLen
+              }
+              audioStreams.push({ id: audioIdx, language: lang || 'und', codec: codecName })
+              audioIdx++
+            }
+            k += 5 + esInfoLen
+          }
+          if (audioStreams.length > 0) break // found all tracks, done
+        }
+      }
+      return audioStreams
+    } catch (e: any) {
+      clearTimeout(timeoutId)
+      if (e.name !== 'AbortError') console.warn('[PMT parser] error:', e)
+      return []
+    }
+  }
+
+  // Reset states when the stream source changes and fetch tracks
   useEffect(() => {
     setAudioTracks([])
     
     const match = rawSourceUrl.match(/\/stream\/live\/([^\/?]+)/);
     if (match && match[1]) {
       const channelId = match[1];
+
+      // First try the backend API (fast, works locally)
       api.getLiveStreamInfo(channelId)
-        .then(data => {
+        .then(async data => {
           if (data && data.allAudioStreams && data.allAudioStreams.length > 0) {
+            // Backend returned tracks — use them
             const list = data.allAudioStreams.map((stream: any) => ({
               id: stream.id,
               label: `Track ${stream.id + 1} (${stream.language?.toUpperCase() || 'UND'}) [${stream.codec?.toUpperCase()}]`,
               active: stream.id === (selectedAudioTrackId !== null ? selectedAudioTrackId : 0)
             }))
             setAudioTracks(list)
+          } else {
+            // Backend returned no tracks (likely IP-blocked on Render).
+            // Fall back to client-side MPEG-TS PMT parsing from the raw stream!
+            console.log('[VideoPlayer] Backend returned no audio tracks, falling back to client-side PMT parsing...')
+            const parsed = await parseMpegTsAudioFromStream(rawSourceUrl)
+            if (parsed.length > 0) {
+              console.log(`[VideoPlayer] Client-side PMT parser found ${parsed.length} audio stream(s)`)
+              setAudioTracks(parsed.map(s => ({
+                id: s.id,
+                label: `Track ${s.id + 1} (${s.language.toUpperCase()}) [${s.codec}]`,
+                active: s.id === 0
+              })))
+            }
           }
           if (data && data.transcodingRequired) {
             setIsTranscodingRequired(true)
           }
         })
-        .catch(err => console.warn("Failed to fetch stream info", err));
+        .catch(async err => {
+          console.warn("Backend stream info fetch failed, trying client-side PMT parsing:", err)
+          const parsed = await parseMpegTsAudioFromStream(rawSourceUrl)
+          if (parsed.length > 0) {
+            setAudioTracks(parsed.map(s => ({
+              id: s.id,
+              label: `Track ${s.id + 1} (${s.language.toUpperCase()}) [${s.codec}]`,
+              active: s.id === 0
+            })))
+          }
+        });
     }
   }, [rawSourceUrl])
 
