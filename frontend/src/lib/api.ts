@@ -231,7 +231,7 @@ export const api = {
     return res.json();
   },
 
-  async getHistory(profileId: string) {
+  async getWatchHistory(profileId: string) {
     const res = await fetch(`${API_BASE}/library/history?profileId=${profileId}`, { headers: authHeaders() });
     if (!res.ok) return [];
     return res.json();
@@ -483,4 +483,46 @@ export const api = {
   // ─── DOWNLOAD URLS ──────────────────────────────────────────────────────
   downloadMovieUrl: (movieId: string) => `${API_BASE}/stream/download/movie/${movieId}?token=${getToken()}`,
   downloadEpisodeUrl: (episodeId: string) => `${API_BASE}/stream/download/episode/${episodeId}?token=${getToken()}`,
+
+  // ─── RECOMMENDATIONS ──────────────────────────────────────────────────────
+  async getRecommendations(profileId: string) {
+    const res = await fetch(`${API_BASE}/content/recommendations?profileId=${profileId}`, { headers: authHeaders() });
+    if (!res.ok) return { recommendedMovies: [], recommendedSeries: [] };
+    return res.json();
+  },
+
+  async clearWatchHistory(profileId: string) {
+    const res = await fetch(`${API_BASE}/library/history/clear`, { 
+      method: 'POST', 
+      headers: authHeaders(),
+      body: JSON.stringify({ profileId })
+    });
+    if (!res.ok) throw new Error('Failed to clear history');
+    return res.json();
+  },
+
+  // ─── NOTIFICATIONS ────────────────────────────────────────────────────────
+  async getNotifications(profileId: string) {
+    const res = await fetch(`${API_BASE}/notifications?profileId=${profileId}`, { headers: authHeaders() });
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  async markNotificationAsRead(id: string, profileId: string) {
+    const res = await fetch(`${API_BASE}/notifications/${id}/read`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ profileId })
+    });
+    return res.json();
+  },
+
+  async markAllNotificationsAsRead(profileId: string) {
+    const res = await fetch(`${API_BASE}/notifications/read-all`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ profileId })
+    });
+    return res.json();
+  }
 };

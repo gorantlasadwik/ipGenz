@@ -13,6 +13,7 @@ import { StreamModule } from './stream/stream.module';
 import { MetadataModule } from './metadata/metadata.module';
 import { ContentModule } from './content/content.module';
 import { LibraryModule } from './library/library.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { LibraryModule } from './library/library.module';
     MetadataModule,
     ContentModule,
     LibraryModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -134,6 +134,17 @@ export class LibraryController {
     });
   }
 
+  @Post('history/clear')
+  async clearHistory(@Request() req: any, @Body() body: { profileId: string }) {
+    if (req.user.email === 'demo@ipgenz.com') throw new ForbiddenException('Demo users cannot clear history');
+    const profile = await this.prisma.profile.findFirst({ where: { id: body.profileId, userId: req.user.userId } });
+    if (!profile) throw new Error('Profile not found or access denied');
+    
+    return this.prisma.watchHistory.deleteMany({
+      where: { profileId: body.profileId }
+    });
+  }
+
   // ─── CONTINUE WATCHING ────────────────────────────────────────────────────
 
   @Get('continue-watching')

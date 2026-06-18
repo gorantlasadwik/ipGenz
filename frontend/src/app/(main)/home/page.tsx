@@ -12,13 +12,13 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const profileId = localStorage.getItem("profileId");
     Promise.all([
-      api.getMovies(15),
-      api.getSeries(15),
+      profileId ? api.getRecommendations(profileId) : Promise.resolve({ recommendedMovies: [], recommendedSeries: [] }),
       api.getLiveChannels()
-    ]).then(([m, s, c]) => {
-      setMovies(m)
-      setSeries(s)
+    ]).then(([recs, c]) => {
+      setMovies(recs.recommendedMovies || [])
+      setSeries(recs.recommendedSeries || [])
       setChannels(c.slice(0, 15))
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -101,8 +101,8 @@ export default function HomePage() {
 
         {/* Horizontal Carousels */}
         <div className="flex flex-col gap-10 mt-auto">
-          {movies.length > 1 && <ContentRail title="MY LIST" items={movies.slice(1)} type="movie" />}
-          {series.length > 0 && <ContentRail title="TRENDING SERIES" items={series} type="series" />}
+          {movies.length > 1 && <ContentRail title="RECOMMENDED MOVIES" items={movies.slice(1)} type="movie" />}
+          {series.length > 0 && <ContentRail title="RECOMMENDED SERIES" items={series} type="series" />}
           {channels.length > 0 && (
             <div className="flex flex-col gap-4">
               <h2 className="text-lg font-bold text-white tracking-widest px-2">LIVE CHANNELS</h2>

@@ -4,11 +4,27 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { XtreamAdapter } from '../providers/adapters/xtream.adapter';
 import { M3UAdapter } from '../providers/adapters/m3u.adapter';
 import { decryptString } from '../utils/crypto.util';
+import { ContentService } from './content.service';
 
 @Controller('content')
 @UseGuards(JwtAuthGuard)
 export class ContentController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private contentService: ContentService
+  ) {}
+
+  @Get('recommendations')
+  async getRecommendations(@Request() req: any, @Query('profileId') profileId: string) {
+    if (!profileId) return { recommendedMovies: [], recommendedSeries: [] };
+    // Validate profile belongs to user
+    const profile = await this.prisma.profile.findFirst({
+      where: { id: profileId, userId: req.user.userId }
+    });
+    if (!profile) return { recommendedMovies: [], recommendedSeries: [] };
+
+    return this.contentService.getRecommendations(profileId);
+  }
 
   // ─── MOVIES ────────────────────────────────────────────────────────────────
 

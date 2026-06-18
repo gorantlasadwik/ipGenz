@@ -2,13 +2,26 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useState } from "react"
-import { Search, Bell, User, MonitorPlay, LogOut, Settings, Users, Database } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Search, Bell, User, MonitorPlay, LogOut, Settings, Users, Database, Heart, History, Clock } from "lucide-react"
+import { api } from "@/lib/api"
 
 export function TopNav() {
   const pathname = usePathname()
   const router = useRouter()
   const [profileOpen, setProfileOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [notifications, setNotifications] = useState<any[]>([])
+  
+  const currentProfileId = typeof window !== 'undefined' ? localStorage.getItem("profileId") : null;
+
+  useEffect(() => {
+    if (currentProfileId) {
+      api.getNotifications(currentProfileId).then(data => {
+        setNotifications(data)
+      }).catch(console.error)
+    }
+  }, [currentProfileId])
 
   const handleLogout = () => {
     localStorage.removeItem("token")
@@ -17,12 +30,29 @@ export function TopNav() {
     router.push("/login")
   }
 
+  const markAsRead = async (id: string) => {
+    if (!currentProfileId) return;
+    await api.markNotificationAsRead(id, currentProfileId);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+  }
+
+  const markAllAsRead = async () => {
+    if (!currentProfileId) return;
+    await api.markAllNotificationsAsRead(currentProfileId);
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+  }
+
   const navLinks = [
     { name: "DASHBOARD", path: "/home" },
     { name: "MOVIES", path: "/movies" },
     { name: "SERIES", path: "/series" },
     { name: "LIVE TV", path: "/live" },
+    { name: "FAVORITES", path: "/library/favorites" },
+    { name: "WATCH LATER", path: "/library/watch-later" },
+    { name: "HISTORY", path: "/library/history" },
   ]
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-gradient-to-b from-black/80 to-transparent">
@@ -34,7 +64,7 @@ export function TopNav() {
             IPGENZ
           </Link>
           
-          <nav className="hidden md:flex items-center gap-8">
+          <nav className="hidden md:flex items-center gap-6">
             {navLinks.map((link) => (
               <Link
                 key={link.name}
@@ -54,13 +84,60 @@ export function TopNav() {
           <Link href="/search" className="text-white/80 hover:text-white transition">
             <Search size={22} />
           </Link>
-          <button className="text-white/80 hover:text-white transition">
-            <Bell size={22} />
-          </button>
+
+          {/* Notifications Dropdown */}
+          <div className="relative">
+            <button 
+              onClick={() => { setNotificationsOpen(!notificationsOpen); setProfileOpen(false); }}
+              className="text-white/80 hover:text-white transition relative"
+            >
+              <Bell size={22} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
+            {notificationsOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setNotificationsOpen(false)} />
+                <div className="absolute right-0 mt-4 w-80 max-h-96 overflow-y-auto bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl z-50 text-white">
+                  <div className="px-4 py-3 border-b border-white/10 flex justify-between items-center sticky top-0 bg-zinc-900/95">
+                    <p className="font-bold">Notifications</p>
+                    {unreadCount > 0 && (
+                      <button onClick={markAllAsRead} className="text-xs text-primary hover:text-primary/80">Mark all as read</button>
+                    )}
+                  </div>
+                  
+                  <div className="py-2">
+                    {notifications.length === 0 ? (
+                      <p className="px-4 py-6 text-center text-white/50 text-sm">No notifications yet.</p>
+                    ) : (
+                      notifications.map(n => (
+                        <div 
+                          key={n.id} 
+                          onClick={() => { if (!n.isRead) markAsRead(n.id); }}
+                          className={`px-4 py-3 border-b border-white/5 hover:bg-white/5 cursor-pointer transition ${n.isRead ? 'opacity-60' : 'bg-primary/5'}`}
+                        >
+                          <div className="flex justify-between items-start mb-1">
+                            <p className={`text-sm ${n.isRead ? 'font-medium' : 'font-bold'}`}>{n.title}</p>
+                            {!n.isRead && <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1" />}
+                          </div>
+                          <p className="text-xs text-white/70 line-clamp-2">{n.message}</p>
+                          <p className="text-[10px] text-white/40 mt-2">{new Date(n.createdAt).toLocaleDateString()}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
           
           <div className="relative">
             <button 
-              onClick={() => setProfileOpen(!profileOpen)}
+              onClick={() => { setProfileOpen(!profileOpen); setNotificationsOpen(false); }}
               className="h-10 w-10 rounded-full bg-zinc-800 border-2 border-transparent hover:border-white transition overflow-hidden flex items-center justify-center"
             >
               <User size={20} className="text-white/80" />

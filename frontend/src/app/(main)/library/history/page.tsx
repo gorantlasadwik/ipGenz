@@ -12,7 +12,7 @@ export default function HistoryPage() {
   const loadData = async () => {
     const profileId = localStorage.getItem("profileId")
     if (!profileId) return
-    const data = await api.getHistory(profileId)
+    const data = await api.getWatchHistory(profileId)
     setHistory(data)
     setLoading(false)
   }
@@ -30,6 +30,22 @@ export default function HistoryPage() {
           <h1 className="text-4xl font-bold tracking-tight text-white mb-2">Watch History</h1>
           <p className="text-secondary-foreground text-lg">Everything you've watched recently.</p>
         </div>
+        {history.length > 0 && (
+          <button 
+            onClick={async () => {
+              const profileId = localStorage.getItem("profileId");
+              if (!profileId) return;
+              if (confirm("Are you sure you want to clear your watch history?")) {
+                await api.clearWatchHistory(profileId);
+                setHistory([]);
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors font-semibold"
+          >
+            <Trash2 size={18} />
+            Clear History
+          </button>
+        )}
       </div>
 
       {history.length === 0 ? (
