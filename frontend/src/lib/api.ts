@@ -43,6 +43,7 @@ export const api = {
   // ─── PROFILES ───────────────────────────────────────────────────────────
   async getProfiles() {
     const res = await fetch(`${API_BASE}/profiles`, { headers: authHeaders() });
+    if (res.status === 401) throw new Error('Unauthorized');
     if (!res.ok) return [];
     return res.json();
   },

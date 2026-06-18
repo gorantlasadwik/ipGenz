@@ -35,7 +35,14 @@ export default function ProfilesPage() {
     api.getProfiles().then((data) => {
       setProfiles(data)
       setLoading(false)
-    }).catch(() => setLoading(false))
+    }).catch((err) => {
+      if (err.message === 'Unauthorized') {
+        localStorage.removeItem('token')
+        router.push('/login')
+      } else {
+        setLoading(false)
+      }
+    })
   }, [])
 
   const handleCreateProfile = async () => {
