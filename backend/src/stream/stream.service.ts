@@ -59,9 +59,10 @@ export class StreamService {
       args.push('-ac', '2');
     }
 
-    // Set low-latency options for live stream delivery
-    // Do not use -copyts here, as transcoding audio while copying video causes PTS drift 
-    // and makes mpegts.js drop the audio track. Resetting timestamps to 0 fixes it.
+    // Use -copyts to ensure the transcoded audio track maintains the same timestamps as the copied video track
+    // If we don't copy timestamps, the audio resets to 0 while video stays at the live stream's timestamp,
+    // causing a massive A/V desync that makes mpegts.js completely drop the audio playback!
+    args.push('-copyts');
     args.push('-muxdelay', '0');
     args.push('-max_muxing_queue_size', '1024');
     args.push('-f', 'mpegts');
