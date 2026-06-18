@@ -1,13 +1,17 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../utils/mail.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
-    private jwtService: JwtService
+    private jwtService: JwtService,
+    private prisma: PrismaService,
+    private mailService: MailService
   ) {}
 
   async validateUser(email: string, pass: string, ipAddress?: string): Promise<any> {
@@ -76,21 +80,79 @@ export class AuthService {
   }
 
   async requestTrial(email: string) {
+    // 1. Check if user already has an active trial or requested
     let existingUser = await this.usersService.findOne(email);
-    if (existingUser) {
-      if (existingUser.trialRequested || existingUser.isPremiumTrial) {
-        throw new ConflictException('Trial already requested or active for this email');
-      }
-      // Update existing user
-      await this.usersService.update(existingUser.id, { trialRequested: true });
-      return { success: true };
+    if (existingUser && (existingUser.trialRequested || existingUser.isPremiumTrial)) {
+      throw new ConflictException('Trial already requested or active for this email');
     }
 
-    // Create new user with no password hash
-    await this.usersService.create({
-      email,
-      trialRequested: true,
+    // 2. Fetch the Master Trial Provider
+    const masterProvider = await this.prisma.trialProvider.findFirst();
+    if (!masterProvider) {
+      throw new ServiceUnavailableException('Premium trials are currently disabled or not configured by the administrator.');
+    }
+
+    // 3. Generate credentials
+    const trialUsername = Math.floor(100000000000000 + Math.random() * 900000000000000).toString();
+    const trialPassword = Math.floor(100000000000000 + Math.random() * 900000000000000).toString();
+    const trialExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    let userId: string;
+
+    if (existingUser) {
+      // Update existing user to active trial
+      const updated = await this.prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          isPremiumTrial: true,
+          trialRequested: true,
+          trialUsername,
+          trialPassword,
+          trialExpiry,
+          assignedIp: null
+        }
+      });
+      userId = updated.id;
+    } else {
+      // Create new user
+      const created = await this.prisma.user.create({
+        data: {
+          email,
+          isPremiumTrial: true,
+          trialRequested: true,
+          trialUsername,
+          trialPassword,
+          trialExpiry,
+        }
+      });
+      userId = created.id;
+    }
+
+    // 4. Create default profile for the trial user
+    await this.prisma.profile.create({
+      data: {
+        userId,
+        name: 'Trial User',
+      }
     });
+
+    // 5. Create cloned provider for the trial user
+    await this.prisma.provider.create({
+      data: {
+        userId,
+        providerName: 'Premium Trial',
+        providerType: masterProvider.providerType,
+        serverUrl: masterProvider.serverUrl,
+        username: masterProvider.username,
+        encryptedPassword: masterProvider.encryptedPassword,
+        playlistUrl: masterProvider.playlistUrl,
+        status: 'ACTIVE'
+      }
+    });
+
+    // 6. Email the user the 1-day trial credentials
+    await this.mailService.sendTrialCredentials(email, trialUsername, trialPassword);
+
     return { success: true };
   }
 }

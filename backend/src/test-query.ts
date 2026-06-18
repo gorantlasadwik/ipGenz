@@ -1,3 +1,4 @@
+// Refresh diagnostics
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
@@ -17,6 +18,10 @@ async function main() {
   const channels = await prisma.liveChannel.findMany({ take: 3 });
   console.log('--- CHANNELS ---');
   console.log(JSON.stringify(channels, null, 2));
+
+  const trialProviders = await prisma.trialProvider.findMany();
+  console.log('--- TRIAL PROVIDERS ---');
+  console.log(JSON.stringify(trialProviders, null, 2));
 }
 
 main()

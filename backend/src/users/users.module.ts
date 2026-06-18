@@ -6,6 +6,6 @@ import { MailService } from '../utils/mail.service';
 @Module({
   controllers: [UsersController],
   providers: [UsersService, MailService],
-  exports: [UsersService],
+  exports: [UsersService, MailService],
 })
 export class UsersModule {}

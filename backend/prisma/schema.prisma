@@ -459,3 +459,16 @@ model StreamProfile {
   @@unique([contentType, contentId])
 }
 
+model TrialProvider {
+  id                String       @id @default(uuid())
+  providerName      String
+  providerType      ProviderType @default(XTREAM)
+  serverUrl         String?
+  username          String?
+  encryptedPassword String?
+  playlistUrl       String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+

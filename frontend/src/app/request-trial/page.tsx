@@ -39,9 +39,9 @@ export default function RequestTrialPage() {
         <div className="w-16 h-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_-5px_rgba(34,197,94,0.3)]">
           <Sparkles className="w-8 h-8" />
         </div>
-        <h1 className="text-4xl font-black text-white mb-4">Request Sent!</h1>
+        <h1 className="text-4xl font-black text-white mb-4">Credentials Emailed!</h1>
         <p className="text-zinc-400 max-w-md mx-auto mb-8 text-lg">
-          We've received your request. Once approved, we will send your 15-digit login credentials directly to <strong className="text-white">{email}</strong>.
+          Your 1-day premium IPTV access has been provisioned! We have sent your 15-digit login credentials directly to <strong className="text-white">{email}</strong>. Please check your inbox (and spam folder).
         </p>
         <Link href="/" className="bg-white text-black font-bold px-8 py-3 rounded-full hover:bg-zinc-200 transition">
           Return to Home
@@ -69,7 +69,7 @@ export default function RequestTrialPage() {
           <div className="bg-[#111] border border-white/10 rounded-2xl p-8 shadow-2xl">
             <h1 className="text-2xl font-bold text-white mb-2">Request 1-Day Trial</h1>
             <p className="text-zinc-400 text-sm mb-8">
-              No IPTV provider? No problem. Fill out your email and our admin will provision a 1-day premium trial for you.
+              No IPTV provider? No problem. Enter your email and we will instantly generate and email your 1-day premium trial credentials.
             </p>
 
             {error && (

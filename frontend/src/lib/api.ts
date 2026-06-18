@@ -487,6 +487,22 @@ export const api = {
     return res.json();
   },
 
+  async getTrialProvider() {
+    const res = await fetch(`${API_BASE}/sadwik/premium-provider`, { headers: authHeaders() });
+    if (!res.ok) return null;
+    return res.json();
+  },
+
+  async saveTrialProvider(data: any) {
+    const res = await fetch(`${API_BASE}/sadwik/premium-provider`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update premium trial provider');
+    return res.json();
+  },
+
   // ─── SYNC ────────────────────────────────────────────────────────────────
   async syncProvider(providerId: string) {
     const res = await fetch(`${API_BASE}/sync/${providerId}`, {

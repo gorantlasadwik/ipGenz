@@ -1,3 +1,4 @@
+// Refresh diagnostics
 import { Controller, Get, Post, Delete, Param, Body } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CodecService } from '../stream/codec.service';
@@ -5,7 +6,7 @@ import { ObservabilityService } from './observability.service';
 import * as bcrypt from 'bcrypt';
 import * as os from 'os';
 import { ProviderType } from '@prisma/client';
-import { encryptString } from '../utils/crypto.util';
+import { encryptString, decryptString } from '../utils/crypto.util';
 
 @Controller('sadwik')
 export class SadwikController {
@@ -576,4 +577,63 @@ export class SadwikController {
 
     return newProvider;
   }
+
+  @Get('premium-provider')
+  async getPremiumProvider() {
+    const provider = await this.prisma.trialProvider.findFirst();
+    if (!provider) return null;
+
+    return {
+      id: provider.id,
+      providerName: provider.providerName,
+      providerType: provider.providerType,
+      serverUrl: provider.serverUrl,
+      username: provider.username,
+      password: provider.encryptedPassword ? decryptString(provider.encryptedPassword) : '',
+      playlistUrl: provider.playlistUrl,
+    };
+  }
+
+  @Post('premium-provider')
+  async setPremiumProvider(@Body() body: any) {
+    const existing = await this.prisma.trialProvider.findFirst();
+
+    const data = {
+      providerName: body.providerName?.trim() || 'Premium Trial Master',
+      providerType: body.providerType,
+      serverUrl: body.serverUrl?.trim() || null,
+      username: body.username?.trim() || null,
+      encryptedPassword: body.password ? encryptString(body.password.trim()) : null,
+      playlistUrl: body.playlistUrl?.trim() || null,
+    };
+
+    let result;
+    if (existing) {
+      result = await this.prisma.trialProvider.update({
+        where: { id: existing.id },
+        data,
+      });
+    } else {
+      result = await this.prisma.trialProvider.create({
+        data,
+      });
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        action: 'UPDATE_PREMIUM_TRIAL_PROVIDER',
+        target: result.id,
+      },
+    });
+
+    return {
+      id: result.id,
+      providerName: result.providerName,
+      providerType: result.providerType,
+      serverUrl: result.serverUrl,
+      username: result.username,
+      playlistUrl: result.playlistUrl,
+    };
+  }
 }
+
