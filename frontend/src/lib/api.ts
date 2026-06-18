@@ -53,7 +53,10 @@ export const api = {
       headers: authHeaders(),
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to create profile');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to create profile');
+    }
     return res.json();
   },
 
