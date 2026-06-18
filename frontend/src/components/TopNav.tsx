@@ -46,10 +46,7 @@ export function TopNav() {
     { name: "DASHBOARD", path: "/home" },
     { name: "MOVIES", path: "/movies" },
     { name: "SERIES", path: "/series" },
-    { name: "LIVE TV", path: "/live" },
-    { name: "FAVORITES", path: "/library/favorites" },
-    { name: "WATCH LATER", path: "/library/watch-later" },
-    { name: "HISTORY", path: "/library/history" },
+    { name: "LIVE TV", path: "/live" }
   ]
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
@@ -76,6 +73,26 @@ export function TopNav() {
                 {link.name}
               </Link>
             ))}
+            
+            {/* Library Dropdown */}
+            <div className="relative group">
+              <span className={`text-sm font-bold tracking-widest transition-colors cursor-pointer py-4 ${pathname.includes('/library') ? "text-white" : "text-white/60 hover:text-white"}`}>
+                LIBRARY
+              </span>
+              <div className="absolute top-[100%] left-0 pt-2 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50">
+                <div className="bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden py-2">
+                  <Link href="/library/favorites" className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-white/80 hover:text-white hover:bg-white/10 transition">
+                    <Heart size={16} /> FAVORITES
+                  </Link>
+                  <Link href="/library/watch-later" className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-white/80 hover:text-white hover:bg-white/10 transition">
+                    <Clock size={16} /> WATCH LATER
+                  </Link>
+                  <Link href="/library/history" className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-white/80 hover:text-white hover:bg-white/10 transition">
+                    <History size={16} /> HISTORY
+                  </Link>
+                </div>
+              </div>
+            </div>
           </nav>
         </div>
 
