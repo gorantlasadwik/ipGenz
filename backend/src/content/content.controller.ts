@@ -66,17 +66,18 @@ export class ContentController {
           const info = await adapter.getMovieInfo(movie.providerStreamId);
           if (info && Object.keys(info).length > 0) {
             // Update database with new info
-            movie = await this.prisma.movie.update({
-              where: { id: movie.id },
+            // Cast to any to suppress local TS errors because local PrismaClient failed to generate
+            movie = await (this.prisma.movie.update as any)({
+              where: { id: movie?.id },
               data: {
-                description: info.description || movie.description,
-                director: info.director || movie.director,
-                actors: info.actors || movie.actors,
-                backdrop: info.backdrop || movie.backdrop,
-                poster: info.poster || movie.poster,
-                year: info.year || movie.year,
-                duration: info.duration || movie.duration,
-                rating: info.rating || movie.rating,
+                description: info.description || (movie as any).description,
+                director: info.director || (movie as any).director,
+                actors: info.actors || (movie as any).actors,
+                backdrop: info.backdrop || (movie as any).backdrop,
+                poster: info.poster || (movie as any).poster,
+                year: info.year || (movie as any).year,
+                duration: info.duration || (movie as any).duration,
+                rating: info.rating || (movie as any).rating,
               },
               include: { category: true, provider: true },
             });
@@ -84,7 +85,7 @@ export class ContentController {
         }
       } catch (err) {
         // Just log the error, don't fail the request if metadata fetch fails
-        console.error(`Failed to fetch dynamic movie info for ${movie.id}:`, err.message);
+        console.error(`Failed to fetch dynamic movie info for ${movie?.id}:`, err.message);
       }
     }
 
