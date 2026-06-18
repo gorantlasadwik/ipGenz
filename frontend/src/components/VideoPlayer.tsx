@@ -24,19 +24,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   const [showSettings, setShowSettings] = useState(false)
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<number | null>(null)
   const [isTranscodingRequired, setIsTranscodingRequired] = useState(false)
+  // Use a ref so we can read the latest value inside selectAudioTrack without triggering re-renders
+  const isTranscodingRequiredRef = useRef(false)
 
   // Compute isMpegTs synchronously during render
   const firstSource = options.sources?.[0]
   const rawSourceUrl = firstSource?.src || ''
   // Browser-native audio codecs (no transcoding needed)
   const BROWSER_NATIVE_AUDIO = ['AAC', 'MP3', 'OPUS', 'VORBIS']
-  // When a non-native audio codec is detected (AC3, MP2, etc.) OR a specific audio track is
-  // requested, we must transcode via backend. Append audioTrack param to trigger FFmpeg.
-  const sourceUrl = selectedAudioTrackId !== null || isTranscodingRequired
+  // Only append audioTrack when backend transcoding is needed (non-native codecs like AC3/MP2)
+  // For native codecs, we switch client-side via mpegts.js currentAudioStream — no URL change!
+  const sourceUrl = isTranscodingRequired
     ? `${rawSourceUrl}${rawSourceUrl.includes('?') ? '&' : '?'}audioTrack=${selectedAudioTrackId ?? 0}`
     : rawSourceUrl
   const sourceType = firstSource?.type || ''
-  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || isTranscodingRequired || selectedAudioTrackId !== null
+  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || isTranscodingRequired
 
   // Parse MPEG-TS PMT tables from raw stream bytes to detect audio tracks client-side.
   // This runs entirely in the browser using the user's home IP - no backend needed!
@@ -169,6 +171,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
               const needsTranscode = parsed.some(s => !BROWSER_NATIVE_AUDIO.includes(s.codec.toUpperCase()))
               if (needsTranscode) {
                 console.log('[VideoPlayer] Non-native audio codec detected, enabling backend transcoding...')
+                isTranscodingRequiredRef.current = true
                 setIsTranscodingRequired(true)
               }
             }
@@ -189,6 +192,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             const needsTranscode = parsed.some(s => !BROWSER_NATIVE_AUDIO.includes(s.codec.toUpperCase()))
             if (needsTranscode) {
               console.log('[VideoPlayer] Non-native audio codec detected, enabling backend transcoding...')
+              isTranscodingRequiredRef.current = true
               setIsTranscodingRequired(true)
             }
           }
@@ -272,22 +276,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
 
   const selectAudioTrack = (id: number) => {
     setAudioTracks(prev => prev.map(t => ({ ...t, active: t.id === id })))
-    setSelectedAudioTrackId(id)
 
-    // For live IPTV streams using mpegts.js: switch audio tracks DIRECTLY in the browser.
-    // The browser already has the full multiplexed .ts stream so mpegts.js can handle this
-    // client-side without ANY backend involvement. This bypasses the Render IP ban entirely!
-    if (mpegtsPlayerRef.current) {
+    // For live IPTV streams using mpegts.js with NATIVE codecs (AAC, MP3):
+    // Switch audio tracks DIRECTLY in the browser via mpegts.js API.
+    // Do NOT change selectedAudioTrackId — that would change sourceUrl and destroy the player!
+    if (mpegtsPlayerRef.current && !isTranscodingRequiredRef.current) {
       try {
         mpegtsPlayerRef.current.currentAudioStream = id
-        console.log(`[mpegts] Switched to audio stream ${id} client-side`)
+        console.log(`[mpegts] Switched to audio stream ${id} client-side (native codec)`)
       } catch (e) {
         console.warn('[mpegts] Failed to switch audio stream client-side:', e)
       }
-      return // Do NOT fall through to backend transcode for live streams
+      return // Done — no state change, no URL change, no player recreation
     }
 
-    // For Video.js (VOD) streams: use backend transcode to switch audio track
+    // For non-native codecs (AC3/MP2) or Video.js: change selectedAudioTrackId
+    // which updates sourceUrl with ?audioTrack=X and triggers backend FFmpeg transcoding
+    setSelectedAudioTrackId(id)
     if (playerRef.current) {
       handleSelectVideoJsAudio(id)
     }
