@@ -93,10 +93,12 @@ export class StreamService {
         if (buf[0] !== SYNC_BYTE) {
           const idx = buf.indexOf(SYNC_BYTE);
           if (idx === -1) { buf = Buffer.alloc(0); break; }
-          buf = buf.subarray(idx); continue;
+          buf = Buffer.from(buf.subarray(idx)); continue;
         }
-        const pkt = buf.subarray(0, PACKET_SIZE);
-        buf = buf.subarray(PACKET_SIZE);
+        // CRITICAL: Copy the packet bytes — subarray is a VIEW, not a copy!
+        // If we don't copy, buf reassignment below will corrupt pkt before it's written.
+        const pkt = Buffer.from(buf.subarray(0, PACKET_SIZE));
+        buf = Buffer.from(buf.subarray(PACKET_SIZE));
         const pid = ((pkt[1] & 0x1F) << 8) | pkt[2];
         const pusi = (pkt[1] & 0x40) !== 0;
         const afCtrl = (pkt[3] & 0x30) >> 4;
