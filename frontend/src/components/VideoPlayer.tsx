@@ -139,15 +139,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   useEffect(() => {
     setAudioTracks([])
     
-    const match = rawSourceUrl.match(/\/stream\/live\/([^\/?]+)/);
-    if (match && match[1]) {
-      const channelId = match[1];
+    if (rawSourceUrl && rawSourceUrl.includes('/stream/')) {
+      const isMovie = rawSourceUrl.includes('/stream/movie/')
+      const isEpisode = rawSourceUrl.includes('/stream/episode/')
+      const isLive = rawSourceUrl.includes('/stream/live/')
+      
+      let fetchPromise: Promise<any> | null = null;
+      
+      if (isMovie) {
+        const id = rawSourceUrl.split('/stream/movie/')[1].split('?')[0]
+        fetchPromise = api.getMovieStreamInfo(id)
+      } else if (isEpisode) {
+        const id = rawSourceUrl.split('/stream/episode/')[1].split('?')[0]
+        fetchPromise = api.getEpisodeStreamInfo(id)
+      } else if (isLive) {
+        const id = rawSourceUrl.split('/stream/live/')[1].split('?')[0]
+        fetchPromise = api.getLiveStreamInfo(id)
+      }
 
-      // First try the backend API (fast, works locally)
-      api.getLiveStreamInfo(channelId)
-        .then(async data => {
-          if (data && data.allAudioStreams && data.allAudioStreams.length > 0) {
-            // Backend returned tracks — use them
+      if (fetchPromise) {
+        fetchPromise
+          .then(async data => {
+            if (data && data.allAudioStreams && data.allAudioStreams.length > 0) {
+              // Backend returned tracks — use them
             const list = data.allAudioStreams.map((stream: any) => ({
               id: stream.id,
               label: `Track ${stream.id + 1} (${stream.language?.toUpperCase() || 'UND'}) [${stream.codec?.toUpperCase()}]`,
@@ -185,9 +199,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
               active: s.id === 0
             })))
             // Show tracks for informational purposes only — don't force transcoding
-            // as that would break video playback if the backend can't reach the provider
           }
         });
+      }
     }
   }, [rawSourceUrl])
 

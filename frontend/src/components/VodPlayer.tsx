@@ -1102,7 +1102,7 @@ export const VodPlayer: React.FC<VodPlayerProps> = ({
               )}
 
               {/* Audio & Subtitle track menus */}
-              {(!isFallback || backendAudioTracks.length > 0) && (audioTracks.length > 0 || subtitleTracks.length > 0 || backendAudioTracks.length > 0) && (
+              {(audioTracks.length > 0 || subtitleTracks.length > 0 || backendAudioTracks.length > 0 || isFallback) && (
                 <div className="relative">
                   <button 
                     onClick={() => setActiveMenu(activeMenu === 'audio' ? 'none' : 'audio')}
