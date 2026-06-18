@@ -79,11 +79,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
         // If we already fetched tracks from the backend API, preserve them!
         if (prev.length > 0) return prev;
 
-        if (mediaInfo && mediaInfo.audioStreams && mediaInfo.audioStreams.length > 1) {
+        if (mediaInfo && mediaInfo.audioStreams && mediaInfo.audioStreams.length > 0) {
           const currentStream = player.currentAudioStream !== undefined ? player.currentAudioStream : 0
           return mediaInfo.audioStreams.map((stream: any, idx: number) => ({
             id: idx,
-            label: stream.language ? `Audio Track ${idx + 1} (${stream.language})` : `Audio Track ${idx + 1} (${stream.codec || 'MPEG-TS'})`,
+            label: stream.language ? `Track ${idx + 1} (${stream.language.toUpperCase()}) [${stream.codec?.toUpperCase() || 'MPEG-TS'}]` : `Track ${idx + 1} (UND) [${stream.codec?.toUpperCase() || 'MPEG-TS'}]`,
             active: idx === (selectedAudioTrackId !== null ? selectedAudioTrackId : currentStream)
           }))
         }
