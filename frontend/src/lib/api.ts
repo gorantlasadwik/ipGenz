@@ -55,7 +55,7 @@ export const api = {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || 'Failed to create profile');
+      throw new Error(err.message || `Server Error ${res.status}: Failed to create profile`);
     }
     return res.json();
   },
