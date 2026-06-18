@@ -7,17 +7,43 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
 
   constructor() {
+    let host = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
+    if (host.startsWith('"') && host.endsWith('"')) host = host.slice(1, -1);
+    if (host.startsWith("'") && host.endsWith("'")) host = host.slice(1, -1);
+
+    let user = (process.env.SMTP_USER || '').trim();
+    if (user.startsWith('"') && user.endsWith('"')) user = user.slice(1, -1);
+    if (user.startsWith("'") && user.endsWith("'")) user = user.slice(1, -1);
+
+    let pass = (process.env.SMTP_PASS || '').trim();
+    if (pass.startsWith('"') && pass.endsWith('"')) pass = pass.slice(1, -1);
+    if (pass.startsWith("'") && pass.endsWith("'")) pass = pass.slice(1, -1);
+
+    const portStr = (process.env.SMTP_PORT || '587').trim();
+    const port = parseInt(portStr.replace(/['"]/g, ''), 10);
+
+    const secureStr = (process.env.SMTP_SECURE || 'false').trim().toLowerCase().replace(/['"]/g, '');
+    const secure = secureStr === 'true';
+
     this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587', 10),
-      secure: process.env.SMTP_SECURE === 'true',
+      host,
+      port,
+      secure,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user,
+        pass,
       },
       connectionTimeout: 10000, // 10 seconds
       greetingTimeout: 10000,   // 10 seconds
       socketTimeout: 10000,     // 10 seconds
+    });
+
+    this.transporter.verify((error, success) => {
+      if (error) {
+        this.logger.error('SMTP Connection Verification Failed on Startup:', error);
+      } else {
+        this.logger.log('SMTP Server connection verified successfully.');
+      }
     });
   }
 
