@@ -199,10 +199,6 @@ export const VodPlayer: React.FC<VodPlayerProps> = ({
           label: `Track ${stream.id + 1} (${(stream.language || 'UND').toUpperCase()}) [${(stream.codec || '').toUpperCase()}]`,
         }));
         setBackendAudioTracks(list);
-        // Default to first track if not selected
-        if (!selectedBackendAudio) {
-          setSelectedBackendAudio(list[0]);
-        }
       }
     };
     fetchInfo();

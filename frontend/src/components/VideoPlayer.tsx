@@ -47,13 +47,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             const list = data.allAudioStreams.map((stream: any) => ({
               id: stream.id,
               label: `Track ${stream.id + 1} (${stream.language?.toUpperCase() || 'UND'}) [${stream.codec?.toUpperCase()}]`,
-              active: stream.id === 0
+              active: stream.id === (selectedAudioTrackId !== null ? selectedAudioTrackId : 0)
             }))
             setAudioTracks(list)
-            // By default, let's select the first track so the stream explicitly maps it!
-            if (selectedAudioTrackId === null) {
-              setSelectedAudioTrackId(list[0].id)
-            }
           }
           if (data && data.transcodingRequired) {
             setIsTranscodingRequired(true)
@@ -80,8 +76,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
     try {
       const mediaInfo = player.mediaInfo
       setAudioTracks(prev => {
-        // If we already fetched multiple tracks from the backend API, preserve them!
-        if (prev.length > 1) return prev;
+        // If we already fetched tracks from the backend API, preserve them!
+        if (prev.length > 0) return prev;
 
         if (mediaInfo && mediaInfo.audioStreams && mediaInfo.audioStreams.length > 1) {
           const currentStream = player.currentAudioStream !== undefined ? player.currentAudioStream : 0
