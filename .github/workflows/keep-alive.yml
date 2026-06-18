@@ -2,8 +2,9 @@ name: Keep Backend Alive
 
 on:
   schedule:
-    # Runs every 10 minutes to prevent the Render free tier from sleeping (sleeps after 15 mins)
-    - cron: '*/10 * * * *'
+    # Runs every minute (the fastest GitHub Actions allows) to keep Render awake.
+    # Note: GitHub Actions may delay cron jobs by a few minutes during peak times.
+    - cron: '* * * * *'
   workflow_dispatch: # Allows manual triggering from the GitHub Actions UI
 
 jobs:
