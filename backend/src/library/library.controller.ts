@@ -149,11 +149,12 @@ export class LibraryController {
 
   @Get('continue-watching')
   async getContinueWatching(@Request() req: any, @Query('profileId') profileId: string) {
-    return this.prisma.continueWatching.findMany({
+    const items = await this.prisma.continueWatching.findMany({
       where: { profileId, profile: { userId: req.user.userId } },
       orderBy: { lastWatched: 'desc' },
       take: 20,
     });
+    return this.hydrateContent(items);
   }
 
   @Post('continue-watching')

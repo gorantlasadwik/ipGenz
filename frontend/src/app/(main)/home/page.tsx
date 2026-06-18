@@ -9,17 +9,20 @@ export default function HomePage() {
   const [movies, setMovies] = useState<any[]>([])
   const [series, setSeries] = useState<any[]>([])
   const [channels, setChannels] = useState<any[]>([])
+  const [continueWatching, setContinueWatching] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const profileId = localStorage.getItem("profileId");
     Promise.all([
       profileId ? api.getRecommendations(profileId) : Promise.resolve({ recommendedMovies: [], recommendedSeries: [] }),
-      api.getLiveChannels()
-    ]).then(([recs, c]) => {
+      api.getLiveChannels(),
+      profileId ? api.getContinueWatching(profileId) : Promise.resolve([])
+    ]).then(([recs, c, cw]) => {
       setMovies(recs.recommendedMovies || [])
       setSeries(recs.recommendedSeries || [])
       setChannels(c.slice(0, 15))
+      setContinueWatching(cw || [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
@@ -101,6 +104,7 @@ export default function HomePage() {
 
         {/* Horizontal Carousels */}
         <div className="flex flex-col gap-10 mt-auto">
+          {continueWatching.length > 0 && <ContentRail title="CONTINUE WATCHING" items={continueWatching.map(cw => ({...cw.content, id: cw.contentId, type: cw.contentType}))} type="mixed" />}
           {movies.length > 1 && <ContentRail title="RECOMMENDED MOVIES" items={movies.slice(1)} type="movie" />}
           {series.length > 0 && <ContentRail title="RECOMMENDED SERIES" items={series} type="series" />}
           {channels.length > 0 && (
@@ -124,14 +128,16 @@ export default function HomePage() {
   )
 }
 
-function ContentRail({ title, items, type }: { title: string, items: any[], type: "movie" | "series" }) {
+function ContentRail({ title, items, type }: { title: string, items: any[], type: "movie" | "series" | "mixed" }) {
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-lg font-bold text-white tracking-widest px-2">{title}</h2>
       <div className="flex gap-4 overflow-x-auto pb-6 px-2 snap-x scrollbar-hide">
-        {items.map((item) => (
+        {items.map((item) => {
+          const routeType = type === 'mixed' ? (item.type === 'MOVIE' || item.type === 'movie' ? 'movies' : 'series') : (type === 'movie' ? 'movies' : 'series');
+          return (
           <Link 
-            href={`/${type === 'movie' ? 'movies' : 'series'}/${item.id}`}
+            href={`/${routeType}/${item.id}`}
             key={item.id} 
             className="snap-start shrink-0 w-44 aspect-[2/3] bg-zinc-900 rounded-lg overflow-hidden relative group cursor-pointer border border-transparent hover:border-white/50 transition-all duration-300 hover:scale-105 hover:-translate-y-2 shadow-xl hover:shadow-2xl"
           >
@@ -145,7 +151,8 @@ function ContentRail({ title, items, type }: { title: string, items: any[], type
               <Play className="fill-white text-white w-10 h-10 self-center mb-6 shadow-2xl drop-shadow-2xl transform scale-50 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-300 delay-100" />
             </div>
           </Link>
-        ))}
+          );
+        })}
       </div>
     </div>
   )
