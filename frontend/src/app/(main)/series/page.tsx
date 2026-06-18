@@ -49,6 +49,10 @@ export default function SeriesPage() {
             setActiveCategory(found)
           }
         }
+        const savedQuery = sessionStorage.getItem('seriesSearchQuery')
+        if (savedQuery) {
+          setSeriesQuery(savedQuery)
+        }
       }
       setCategoriesLoaded(true)
     }).catch(err => {
@@ -59,6 +63,9 @@ export default function SeriesPage() {
 
   // Debounce the search query
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('seriesSearchQuery', seriesQuery)
+    }
     const timer = setTimeout(() => setDebouncedSeriesQuery(seriesQuery), 500)
     return () => clearTimeout(timer)
   }, [seriesQuery])

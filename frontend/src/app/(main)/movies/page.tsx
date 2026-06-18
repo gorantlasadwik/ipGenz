@@ -48,6 +48,10 @@ export default function MoviesPage() {
             setActiveCategory(found)
           }
         }
+        const savedQuery = sessionStorage.getItem('moviesSearchQuery')
+        if (savedQuery) {
+          setMoviesQuery(savedQuery)
+        }
       }
       setCategoriesLoaded(true)
     }).catch(err => {
@@ -58,6 +62,9 @@ export default function MoviesPage() {
 
   // Debounce the search query
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('moviesSearchQuery', moviesQuery)
+    }
     const timer = setTimeout(() => setDebouncedMoviesQuery(moviesQuery), 500)
     return () => clearTimeout(timer)
   }, [moviesQuery])

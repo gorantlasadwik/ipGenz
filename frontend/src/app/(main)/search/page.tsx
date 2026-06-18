@@ -11,6 +11,19 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedQuery = sessionStorage.getItem('globalSearchQuery')
+      if (savedQuery) {
+        setQuery(savedQuery)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('globalSearchQuery', query)
+    }
+
     if (query.length < 2) {
       setResults({ movies: [], series: [], channels: [] })
       return

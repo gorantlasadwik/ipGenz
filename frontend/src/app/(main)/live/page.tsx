@@ -46,6 +46,10 @@ export default function LiveTvPage() {
             setActiveCategory(found)
           }
         }
+        const savedQuery = sessionStorage.getItem('liveSearchQuery')
+        if (savedQuery) {
+          setChannelsQuery(savedQuery)
+        }
       }
       setCategoriesLoaded(true)
     }).catch(err => {
@@ -56,6 +60,9 @@ export default function LiveTvPage() {
 
   // Debounce the search query
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('liveSearchQuery', channelsQuery)
+    }
     const timer = setTimeout(() => setDebouncedChannelsQuery(channelsQuery), 500)
     return () => clearTimeout(timer)
   }, [channelsQuery])
