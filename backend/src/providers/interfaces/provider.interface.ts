@@ -27,6 +27,8 @@ export interface InternalMovie {
   poster?: string;
   backdrop?: string;
   description?: string;
+  director?: string;
+  actors?: string;
   year?: number;
   rating?: number;
   duration?: number;

@@ -101,88 +101,90 @@ export default function MovieDetailPage() {
     <div className="w-full h-full overflow-y-auto bg-[#0a0a0a] text-white p-8 md:p-16">
       <div className="max-w-6xl flex flex-col md:flex-row gap-12 items-start mt-4">
         
-        {/* Poster */}
-        <div className="w-[280px] aspect-[2/3] rounded-xl overflow-hidden border border-white/10 shadow-2xl flex-shrink-0 bg-zinc-900/40">
+        {/* Poster - Purple fallback style from screenshot */}
+        <div className="w-[300px] aspect-[2/3] rounded-xl overflow-hidden flex-shrink-0 bg-[#2d2546] border-none shadow-2xl flex flex-col items-center justify-center text-center p-6 relative">
           {movie.poster ? (
-            <img src={movie.poster} alt={movie.name} className="w-full h-full object-cover" />
+            <img src={movie.poster} alt={movie.name} className="absolute inset-0 w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              {/* Empty placeholder matching the screenshot */}
-            </div>
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="currentColor" className="text-white/40 mb-4">
+                <path d="M19.82 2H4.18C2.97602 2 2 2.97602 2 4.18v15.64C2 21.024 2.97602 22 4.18 22h15.64c1.204 0 2.18-.976 2.18-2.18V4.18C22 2.97602 21.024 2 19.82 2zM7 2h1v4H7V2zm4 0h1v4h-1V2zm4 0h1v4h-1V2zm-9.5 6h13c.8284 0 1.5.6716 1.5 1.5v11c0 .8284-.6716 1.5-1.5 1.5h-13c-.8284 0-1.5-.6716-1.5-1.5v-11C4 8.6716 4.6716 8 5.5 8z" />
+              </svg>
+              <h2 className="text-white text-lg font-medium tracking-wide">{movie.name}</h2>
+            </>
           )}
         </div>
 
         {/* Details */}
         <div className="flex flex-col flex-1 pt-2">
-          <Link href="/movies" className="text-sm text-zinc-400 hover:text-white transition flex items-center gap-2 mb-6">
-            <ArrowLeft size={16} /> Back to Movies
-          </Link>
           
-          <h1 className="text-4xl md:text-[2.75rem] font-serif font-bold text-white tracking-tight leading-tight mb-4">
+          <h1 className="text-4xl md:text-5xl font-sans font-bold text-white tracking-tight leading-tight mb-4">
             {movie.name} {movie.year ? `(${movie.year})` : ''}
           </h1>
 
-          <div className="flex items-center gap-3 mb-8">
+          <div className="mb-6">
             {movie.category && (
-              <span className="px-3 py-1 bg-zinc-900/80 border border-white/10 rounded text-xs font-medium text-zinc-300">
+              <span className="px-3 py-1.5 bg-transparent border border-white/20 rounded-md text-sm font-medium text-zinc-300">
                 {movie.category.name}
-              </span>
-            )}
-            {movie.rating && (
-              <span className="px-3 py-1 bg-zinc-900/80 border border-white/10 rounded text-xs font-medium text-zinc-300 flex items-center gap-1">
-                ⭐ {movie.rating.toFixed(1)}
-              </span>
-            )}
-            {movie.duration && (
-              <span className="px-3 py-1 bg-zinc-900/80 border border-white/10 rounded text-xs font-medium text-zinc-300">
-                {Math.floor(movie.duration / 60)}h {movie.duration % 60}m
               </span>
             )}
           </div>
 
-          {movie.description && (
-            <p className="text-base text-zinc-400 mb-8 leading-relaxed max-w-3xl">
-              {movie.description}
-            </p>
+          {(movie.description || movie.director || movie.actors) && (
+            <div className="flex flex-col gap-6 mb-8">
+              {movie.description && (
+                <p className="text-[15px] text-zinc-300 leading-relaxed max-w-3xl">
+                  {movie.description}
+                </p>
+              )}
+
+              {movie.actors && (
+                <div>
+                  <h3 className="text-xs text-zinc-500 font-medium mb-1">Actors</h3>
+                  <p className="text-sm font-semibold text-zinc-200">{movie.actors}</p>
+                </div>
+              )}
+
+              {movie.director && (
+                <div>
+                  <h3 className="text-xs text-zinc-500 font-medium mb-1">Director</h3>
+                  <p className="text-sm font-semibold text-zinc-200">{movie.director}</p>
+                </div>
+              )}
+            </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4 mt-2">
             <button 
               onClick={() => setIsPlaying(true)}
-              className="bg-white text-black px-8 py-2.5 rounded-lg font-bold text-sm hover:bg-white/90 transition flex items-center gap-2"
+              className="bg-[#e5e5e5] text-black px-6 py-3 rounded-md font-bold text-[15px] hover:bg-white transition flex items-center gap-3"
             >
-              <Play className="fill-black w-4 h-4" /> Play
+              <div className="bg-white rounded-full p-1.5 flex items-center justify-center shadow-sm">
+                <Play className="fill-black w-4 h-4 ml-0.5" />
+              </div>
+              Play
             </button>
+
             <button 
               onClick={handleFavoriteToggle}
               disabled={isDemo}
-              className={`px-6 py-2.5 rounded-lg font-medium text-sm transition flex items-center gap-2 border ${
+              className={`px-6 py-3 rounded-md font-medium text-[15px] transition flex items-center gap-2 ${
                 isFavorite 
-                  ? "bg-primary/10 border-primary/50 text-primary hover:bg-primary/20" 
-                  : "bg-white/5 border-white/10 text-white hover:bg-white/10"
+                  ? "bg-primary text-white hover:bg-primary/90" 
+                  : "bg-[#4d4d4d] text-white hover:bg-[#5a5a5a]"
               } ${isDemo ? "opacity-50 cursor-not-allowed" : ""}`}
               title={isDemo ? "Favorites disabled in demo mode" : ""}
             >
-              <Heart size={16} className={isFavorite ? "fill-current" : ""} /> Favorite
+              {isFavorite ? <Heart className="w-5 h-5 fill-current" /> : <span className="text-xl leading-none mr-1">+</span>} 
+              {isFavorite ? "Favorited" : "Add to favorites"}
             </button>
-            <button 
-              onClick={handleWatchLaterToggle}
-              disabled={isDemo}
-              className={`px-6 py-2.5 rounded-lg font-medium text-sm transition flex items-center gap-2 border ${
-                isWatchLater 
-                  ? "bg-primary/10 border-primary/50 text-primary hover:bg-primary/20" 
-                  : "bg-white/5 border-white/10 text-white hover:bg-white/10"
-              } ${isDemo ? "opacity-50 cursor-not-allowed" : ""}`}
-              title={isDemo ? "Watch Later disabled in demo mode" : ""}
-            >
-              <Clock size={16} className={isWatchLater ? "fill-current" : ""} /> Watch Later
-            </button>
+
             <a 
               href={api.downloadMovieUrl(movie.id)}
               download
-              className="px-6 py-2.5 rounded-lg font-medium text-sm transition flex items-center gap-2 border bg-white/5 border-white/10 text-white hover:bg-white/10"
+              className="px-6 py-3 rounded-md font-medium text-[15px] transition flex items-center gap-2 bg-[#1a82d2] text-white hover:bg-[#258cdb]"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
               Download
             </a>
           </div>

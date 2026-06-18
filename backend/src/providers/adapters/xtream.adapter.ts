@@ -100,6 +100,8 @@ export class XtreamAdapter implements ProviderAdapter {
     const info = data.info;
     return {
       description: info.plot || info.description,
+      director: info.director,
+      actors: info.cast || info.actors,
       poster: info.movie_image || info.cover_big,
       backdrop: info.backdrop_path?.[0] || info.backdrop_path,
       year: parseInt(info.releasedate, 10) || undefined,

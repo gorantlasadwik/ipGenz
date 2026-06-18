@@ -69,6 +69,8 @@ export class ContentController {
               where: { id: movie.id },
               data: {
                 description: info.description || movie.description,
+                director: info.director || movie.director,
+                actors: info.actors || movie.actors,
                 backdrop: info.backdrop || movie.backdrop,
                 poster: info.poster || movie.poster,
                 year: info.year || movie.year,

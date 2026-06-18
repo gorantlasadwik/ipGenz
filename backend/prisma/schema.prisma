@@ -167,6 +167,8 @@ model Movie {
   poster             String?
   backdrop           String?
   description        String?
+  director           String?
+  actors             String?
   year               Int?
   rating             Float?
   duration           Int?          // seconds
