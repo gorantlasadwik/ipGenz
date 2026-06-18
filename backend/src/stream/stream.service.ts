@@ -304,7 +304,7 @@ export class StreamService {
     }
   }
 
-  async proxyMovieStream(movieId: string, userId: string, res: Response, audioTrack?: number, start?: number) {
+  async proxyMovieStream(req: any, movieId: string, userId: string, res: Response, audioTrack?: number, start?: number) {
     this.logger.log(`Proxying Movie Stream: ${movieId}, AudioTrack: ${audioTrack}, Start: ${start}`);
 
     const movie = await this.prisma.movie.findFirst({
@@ -339,9 +339,43 @@ export class StreamService {
       return this.handleTranscodeStream(movie.streamUrl, profile.transcodeType as any, res);
     }
 
-    // Direct redirection to support range requests and native browser seek capabilities
-    this.logger.log(`No transcoding required for movie ${movieId}. Redirecting directly to provider.`);
-    return res.redirect(movie.streamUrl);
+    // Proxy the stream directly while supporting Range requests
+    this.logger.log(`No transcoding required for movie ${movieId}. Proxying directly from provider.`);
+    
+    try {
+      const headers: any = {
+        'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
+        'Accept': '*/*',
+      };
+      if (req.headers.range) {
+        headers['Range'] = req.headers.range;
+      }
+
+      const response = await firstValueFrom(
+        this.httpService.get(movie.streamUrl, {
+          responseType: 'stream',
+          headers,
+          validateStatus: status => status < 400 || status === 403 || status === 404,
+        })
+      );
+
+      // Copy essential headers back to the client
+      const headersToCopy = ['content-type', 'content-length', 'content-range', 'accept-ranges'];
+      headersToCopy.forEach(h => {
+        if (response.headers[h]) {
+          res.setHeader(h, response.headers[h]);
+        }
+      });
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      res.status(response.status);
+      response.data.pipe(res);
+    } catch (error) {
+      this.logger.error(`Movie stream proxy failed: ${error.message}`);
+      if (!res.headersSent) {
+        res.status(502).send('Stream Unavailable');
+      }
+    }
   }
 
   async getEpisodeStreamInfo(episodeId: string, userId: string) {
@@ -357,7 +391,7 @@ export class StreamService {
     }
   }
 
-  async proxyEpisodeStream(episodeId: string, userId: string, res: Response, audioTrack?: number, start?: number) {
+  async proxyEpisodeStream(req: any, episodeId: string, userId: string, res: Response, audioTrack?: number, start?: number) {
     this.logger.log(`Proxying Episode Stream: ${episodeId}, AudioTrack: ${audioTrack}, Start: ${start}`);
 
     const episode = await this.prisma.episode.findFirst({
@@ -395,9 +429,43 @@ export class StreamService {
       return this.handleTranscodeStream(episode.streamUrl, profile.transcodeType as any, res);
     }
 
-    // Direct redirection to support range requests and native browser seek capabilities
-    this.logger.log(`No transcoding required for episode ${episodeId}. Redirecting directly to provider.`);
-    return res.redirect(episode.streamUrl);
+    // Proxy the stream directly while supporting Range requests
+    this.logger.log(`No transcoding required for episode ${episodeId}. Proxying directly from provider.`);
+    
+    try {
+      const headers: any = {
+        'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
+        'Accept': '*/*',
+      };
+      if (req.headers.range) {
+        headers['Range'] = req.headers.range;
+      }
+
+      const response = await firstValueFrom(
+        this.httpService.get(episode.streamUrl, {
+          responseType: 'stream',
+          headers,
+          validateStatus: status => status < 400 || status === 403 || status === 404,
+        })
+      );
+
+      // Copy essential headers back to the client
+      const headersToCopy = ['content-type', 'content-length', 'content-range', 'accept-ranges'];
+      headersToCopy.forEach(h => {
+        if (response.headers[h]) {
+          res.setHeader(h, response.headers[h]);
+        }
+      });
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      res.status(response.status);
+      response.data.pipe(res);
+    } catch (error) {
+      this.logger.error(`Episode stream proxy failed: ${error.message}`);
+      if (!res.headersSent) {
+        res.status(502).send('Stream Unavailable');
+      }
+    }
   }
 
   // --- DOWNLOAD PROXIES ---

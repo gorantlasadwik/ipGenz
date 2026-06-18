@@ -35,7 +35,7 @@ export class StreamController {
   ) {
     const trackNum = audioTrack !== undefined && audioTrack !== '' ? parseInt(audioTrack, 10) : undefined;
     const startNum = start !== undefined && start !== '' ? parseFloat(start) : undefined;
-    return this.streamService.proxyMovieStream(movieId, req.user.userId, res, trackNum, startNum);
+    return this.streamService.proxyMovieStream(req, movieId, req.user.userId, res, trackNum, startNum);
   }
 
   @Get('movie/:movieId/info')
@@ -53,7 +53,7 @@ export class StreamController {
   ) {
     const trackNum = audioTrack !== undefined && audioTrack !== '' ? parseInt(audioTrack, 10) : undefined;
     const startNum = start !== undefined && start !== '' ? parseFloat(start) : undefined;
-    return this.streamService.proxyEpisodeStream(episodeId, req.user.userId, res, trackNum, startNum);
+    return this.streamService.proxyEpisodeStream(req, episodeId, req.user.userId, res, trackNum, startNum);
   }
 
   @Get('episode/:episodeId/info')
