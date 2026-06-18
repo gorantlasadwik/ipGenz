@@ -23,6 +23,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   const [audioTracks, setAudioTracks] = useState<{ id: number; label: string; active: boolean }[]>([])
   const [showSettings, setShowSettings] = useState(false)
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<number | null>(null)
+  const [isTranscodingRequired, setIsTranscodingRequired] = useState(false)
 
   // Compute isMpegTs synchronously during render
   const firstSource = options.sources?.[0]
@@ -31,7 +32,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
     ? `${rawSourceUrl}${rawSourceUrl.includes('?') ? '&' : '?'}audioTrack=${selectedAudioTrackId}`
     : rawSourceUrl
   const sourceType = firstSource?.type || ''
-  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts')
+  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || selectedAudioTrackId !== null || isTranscodingRequired
 
   // Reset states when the stream source changes and fetch tracks from backend
   useEffect(() => {
@@ -53,6 +54,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             if (selectedAudioTrackId === null) {
               setSelectedAudioTrackId(list[0].id)
             }
+          }
+          if (data && data.transcodingRequired) {
+            setIsTranscodingRequired(true)
           }
         })
         .catch(err => console.warn("Failed to fetch stream info", err));
