@@ -117,7 +117,7 @@ export const api = {
   },
 
   // ─── CONTENT ────────────────────────────────────────────────────────────
-  async getMovies(categoryIdOrLimit?: string | number, limit?: number) {
+  async getMovies(categoryIdOrLimit?: string | number, limit?: number, q?: string) {
     const params = new URLSearchParams();
     if (typeof categoryIdOrLimit === 'string') {
       params.append('categoryId', categoryIdOrLimit);
@@ -125,6 +125,7 @@ export const api = {
       params.append('limit', categoryIdOrLimit.toString());
     }
     if (limit) params.append('limit', limit.toString());
+    if (q) params.append('q', q);
     const queryString = params.toString();
     const res = await fetch(`${API_BASE}/content/movies${queryString ? `?${queryString}` : ''}`, { headers: authHeaders() });
     if (!res.ok) return [];
@@ -143,7 +144,7 @@ export const api = {
     return res.json();
   },
 
-  async getSeries(categoryIdOrLimit?: string | number, limit?: number) {
+  async getSeries(categoryIdOrLimit?: string | number, limit?: number, q?: string) {
     const params = new URLSearchParams();
     if (typeof categoryIdOrLimit === 'string') {
       params.append('categoryId', categoryIdOrLimit);
@@ -151,6 +152,7 @@ export const api = {
       params.append('limit', categoryIdOrLimit.toString());
     }
     if (limit) params.append('limit', limit.toString());
+    if (q) params.append('q', q);
     const queryString = params.toString();
     const res = await fetch(`${API_BASE}/content/series${queryString ? `?${queryString}` : ''}`, { headers: authHeaders() });
     if (!res.ok) return [];
@@ -169,10 +171,11 @@ export const api = {
     return res.json();
   },
 
-  async getLiveChannels(categoryId?: string, limit?: number) {
+  async getLiveChannels(categoryId?: string, limit?: number, q?: string) {
     const params = new URLSearchParams();
     if (categoryId) params.append('categoryId', categoryId);
     if (limit) params.append('limit', limit.toString());
+    if (q) params.append('q', q);
     const queryString = params.toString();
     const res = await fetch(`${API_BASE}/content/live/channels${queryString ? `?${queryString}` : ''}`, { headers: authHeaders() });
     if (!res.ok) return [];

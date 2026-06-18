@@ -25,6 +25,7 @@ export default function LiveTvPage() {
   const [categoriesLoaded, setCategoriesLoaded] = useState(false)
   const [categoryQuery, setCategoryQuery] = useState("")
   const [channelsQuery, setChannelsQuery] = useState("")
+  const [debouncedChannelsQuery, setDebouncedChannelsQuery] = useState("")
   const [sortBy, setSortBy] = useState("name-asc")
   const [showSortDropdown, setShowSortDropdown] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -53,7 +54,13 @@ export default function LiveTvPage() {
     })
   }, [])
 
-  // Fetch channels when activeCategory changes, but only after categories are loaded/restored
+  // Debounce the search query
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedChannelsQuery(channelsQuery), 500)
+    return () => clearTimeout(timer)
+  }, [channelsQuery])
+
+  // Fetch channels when activeCategory or debounced query changes, but only after categories are loaded/restored
   useEffect(() => {
     if (!categoriesLoaded) return
 
@@ -61,7 +68,7 @@ export default function LiveTvPage() {
     const categoryId = activeCategory ? activeCategory.id : undefined
     // For 'All', limit is 200. For specific categories, limit is 500.
     const limit = activeCategory ? 500 : 200
-    api.getLiveChannels(categoryId, limit).then(ch => {
+    api.getLiveChannels(categoryId, limit, debouncedChannelsQuery).then(ch => {
       setChannels(ch)
       setLoadingChannels(false)
       setLoading(false)
@@ -85,7 +92,7 @@ export default function LiveTvPage() {
       setLoadingChannels(false)
       setLoading(false)
     })
-  }, [activeCategory, categoriesLoaded])
+  }, [activeCategory, categoriesLoaded, debouncedChannelsQuery])
 
   const handleSelectCategory = (cat: Category | null) => {
     setActiveCategory(cat)

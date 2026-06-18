@@ -13,12 +13,13 @@ export class ContentController {
   // ─── MOVIES ────────────────────────────────────────────────────────────────
 
   @Get('movies')
-  async getMovies(@Request() req: any, @Query('categoryId') categoryId?: string, @Query('limit') limit?: string) {
+  async getMovies(@Request() req: any, @Query('categoryId') categoryId?: string, @Query('limit') limit?: string, @Query('q') q?: string) {
     const take = parseInt(limit || '50');
     return this.prisma.movie.findMany({
       where: {
         provider: { userId: req.user.userId },
         ...(categoryId ? { movieCategoryId: categoryId } : {}),
+        ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
       },
       take,
       orderBy: { createdAt: 'desc' },
@@ -50,12 +51,13 @@ export class ContentController {
   // ─── SERIES ────────────────────────────────────────────────────────────────
 
   @Get('series')
-  async getSeries(@Request() req: any, @Query('categoryId') categoryId?: string, @Query('limit') limit?: string) {
+  async getSeries(@Request() req: any, @Query('categoryId') categoryId?: string, @Query('limit') limit?: string, @Query('q') q?: string) {
     const take = parseInt(limit || '50');
     return this.prisma.series.findMany({
       where: {
         provider: { userId: req.user.userId },
         ...(categoryId ? { seriesCategoryId: categoryId } : {}),
+        ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
       },
       take,
       orderBy: { createdAt: 'desc' },
@@ -166,12 +168,13 @@ export class ContentController {
   // ─── LIVE TV ───────────────────────────────────────────────────────────────
 
   @Get('live/channels')
-  async getLiveChannels(@Request() req: any, @Query('categoryId') categoryId?: string, @Query('limit') limit?: string) {
+  async getLiveChannels(@Request() req: any, @Query('categoryId') categoryId?: string, @Query('limit') limit?: string, @Query('q') q?: string) {
     const take = parseInt(limit || '100');
     return this.prisma.liveChannel.findMany({
       where: {
         provider: { userId: req.user.userId },
         ...(categoryId ? { liveCategoryId: categoryId } : {}),
+        ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
       },
       take,
       orderBy: { name: 'asc' },

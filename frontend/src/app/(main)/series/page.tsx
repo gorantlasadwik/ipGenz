@@ -28,6 +28,7 @@ export default function SeriesPage() {
   const [categoriesLoaded, setCategoriesLoaded] = useState(false)
   const [categoryQuery, setCategoryQuery] = useState("")
   const [seriesQuery, setSeriesQuery] = useState("")
+  const [debouncedSeriesQuery, setDebouncedSeriesQuery] = useState("")
   const [sortBy, setSortBy] = useState("name-asc")
   const [showSortDropdown, setShowSortDropdown] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -56,7 +57,13 @@ export default function SeriesPage() {
     })
   }, [])
 
-  // Fetch series when activeCategory changes, but only after categories are loaded/restored
+  // Debounce the search query
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSeriesQuery(seriesQuery), 500)
+    return () => clearTimeout(timer)
+  }, [seriesQuery])
+
+  // Fetch series when activeCategory or debounced query changes, but only after categories are loaded/restored
   useEffect(() => {
     if (!categoriesLoaded) return
 
@@ -64,7 +71,7 @@ export default function SeriesPage() {
     const categoryId = activeCategory ? activeCategory.id : undefined
     // For 'All', limit is 200. For specific categories, limit is 500.
     const limit = activeCategory ? 500 : 200
-    api.getSeries(categoryId, limit).then(data => {
+    api.getSeries(categoryId, limit, debouncedSeriesQuery).then(data => {
       setSeries(data)
       setLoadingSeries(false)
       setLoading(false)
@@ -88,7 +95,7 @@ export default function SeriesPage() {
       setLoadingSeries(false)
       setLoading(false)
     })
-  }, [activeCategory, categoriesLoaded])
+  }, [activeCategory, categoriesLoaded, debouncedSeriesQuery])
 
   const handleSelectCategory = (cat: Category | null) => {
     setActiveCategory(cat)

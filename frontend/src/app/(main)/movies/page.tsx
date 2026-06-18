@@ -27,6 +27,7 @@ export default function MoviesPage() {
   const [categoriesLoaded, setCategoriesLoaded] = useState(false)
   const [categoryQuery, setCategoryQuery] = useState("")
   const [moviesQuery, setMoviesQuery] = useState("")
+  const [debouncedMoviesQuery, setDebouncedMoviesQuery] = useState("")
   const [sortBy, setSortBy] = useState("name-asc")
   const [showSortDropdown, setShowSortDropdown] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -55,7 +56,13 @@ export default function MoviesPage() {
     })
   }, [])
 
-  // Fetch movies when activeCategory changes, but only after categories are loaded/restored
+  // Debounce the search query
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedMoviesQuery(moviesQuery), 500)
+    return () => clearTimeout(timer)
+  }, [moviesQuery])
+
+  // Fetch movies when activeCategory or debounced query changes, but only after categories are loaded/restored
   useEffect(() => {
     if (!categoriesLoaded) return
 
@@ -63,7 +70,7 @@ export default function MoviesPage() {
     const categoryId = activeCategory ? activeCategory.id : undefined
     // For 'All', limit is 200. For specific categories, limit is 500.
     const limit = activeCategory ? 500 : 200
-    api.getMovies(categoryId, limit).then(data => {
+    api.getMovies(categoryId, limit, debouncedMoviesQuery).then(data => {
       setMovies(data)
       setLoadingMovies(false)
       setLoading(false)
@@ -87,7 +94,7 @@ export default function MoviesPage() {
       setLoadingMovies(false)
       setLoading(false)
     })
-  }, [activeCategory, categoriesLoaded])
+  }, [activeCategory, categoriesLoaded, debouncedMoviesQuery])
 
   const handleSelectCategory = (cat: Category | null) => {
     setActiveCategory(cat)
