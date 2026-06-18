@@ -139,7 +139,10 @@ export class ContentController {
     if (!series) return null;
 
     const hasEpisodes = series.seasons.some(s => s.episodes.length > 0);
-    if (!hasEpisodes && series.provider) {
+    const missingMetadata = !series.description;
+    let needsRefetch = false;
+
+    if ((!hasEpisodes || missingMetadata) && series.provider) {
       try {
         let adapter;
         if (series.provider.providerType === 'XTREAM') {
@@ -153,41 +156,65 @@ export class ContentController {
         }
 
         if (adapter) {
-          const episodes = await adapter.getEpisodes(series.providerSeriesId);
-          if (episodes.length > 0) {
-            // Group episodes by seasonNumber
-            const episodesBySeason = new Map<number, any[]>();
-            for (const ep of episodes) {
-              const list = episodesBySeason.get(ep.seasonNumber) || [];
-              list.push(ep);
-              episodesBySeason.set(ep.seasonNumber, list);
-            }
-
-            for (const [seasonNum, epList] of episodesBySeason.entries()) {
-              const seasonObj = await this.prisma.season.upsert({
-                where: { seriesId_seasonNumber: { seriesId: series.id, seasonNumber: seasonNum } },
-                update: {},
-                create: { seriesId: series.id, seasonNumber: seasonNum, name: `Season ${seasonNum}` }
+          // 1. Fetch missing metadata (description, director, actors, year, backdrop)
+          if (missingMetadata && adapter.getSeriesInfo) {
+            const info = await adapter.getSeriesInfo(series.providerSeriesId);
+            if (info && Object.keys(info).length > 0) {
+              // @ts-ignore
+              await (this.prisma.series.update as any)({
+                where: { id: series.id },
+                data: {
+                  description: info.description || (series as any).description,
+                  director: info.director || (series as any).director,
+                  actors: info.actors || (series as any).actors,
+                  backdrop: info.backdrop || (series as any).backdrop,
+                  poster: info.poster || (series as any).poster,
+                  year: info.year || (series as any).year,
+                }
               });
-
-              const epToInsert = epList.map(ep => ({
-                seriesId: series.id,
-                seasonId: seasonObj.id,
-                providerEpisodeId: ep.providerEpisodeId,
-                episodeNumber: ep.episodeNumber,
-                title: ep.title || `Episode ${ep.episodeNumber}`,
-                description: ep.description || null,
-                streamUrl: ep.streamUrl,
-                duration: ep.duration || null
-              }));
-
-              await this.prisma.episode.createMany({
-                data: epToInsert,
-                skipDuplicates: true
-              });
+              needsRefetch = true;
             }
+          }
 
-            // Return updated series structure
+          // 2. Fetch missing episodes
+          if (!hasEpisodes && adapter.getEpisodes) {
+            const episodes = await adapter.getEpisodes(series.providerSeriesId);
+            if (episodes.length > 0) {
+              const episodesBySeason = new Map<number, any[]>();
+              for (const ep of episodes) {
+                const list = episodesBySeason.get(ep.seasonNumber) || [];
+                list.push(ep);
+                episodesBySeason.set(ep.seasonNumber, list);
+              }
+
+              for (const [seasonNum, epList] of episodesBySeason.entries()) {
+                const seasonObj = await this.prisma.season.upsert({
+                  where: { seriesId_seasonNumber: { seriesId: series.id, seasonNumber: seasonNum } },
+                  update: {},
+                  create: { seriesId: series.id, seasonNumber: seasonNum, name: `Season ${seasonNum}` }
+                });
+
+                const epToInsert = epList.map(ep => ({
+                  seriesId: series.id,
+                  seasonId: seasonObj.id,
+                  providerEpisodeId: ep.providerEpisodeId,
+                  episodeNumber: ep.episodeNumber,
+                  title: ep.title || `Episode ${ep.episodeNumber}`,
+                  description: ep.description || null,
+                  streamUrl: ep.streamUrl,
+                  duration: ep.duration || null
+                }));
+
+                await this.prisma.episode.createMany({
+                  data: epToInsert,
+                  skipDuplicates: true
+                });
+              }
+              needsRefetch = true;
+            }
+          }
+
+          if (needsRefetch) {
             return this.prisma.series.findUnique({
               where: { id },
               include: {
@@ -202,7 +229,7 @@ export class ContentController {
           }
         }
       } catch (err) {
-        console.error(`Failed to load episodes on demand for series ${id}:`, err.message);
+        console.error(`Failed to load dynamic data for series ${series?.id}:`, err.message);
       }
     }
 

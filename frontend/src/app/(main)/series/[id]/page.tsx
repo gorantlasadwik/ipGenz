@@ -100,75 +100,86 @@ export default function SeriesDetailPage() {
   }
 
   return (
-    <div className="w-full h-full overflow-y-auto pb-20">
-      {/* Backdrop Hero */}
-      <div className="relative h-[70vh] w-full flex items-end">
-        <div className="absolute inset-0 bg-black">
-          {series.backdrop && (
-            <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${series.backdrop}')` }} />
+    <div className="w-full h-full overflow-y-auto bg-[#0a0a0a] text-white p-8 md:p-16">
+      <div className="max-w-6xl flex flex-col md:flex-row gap-12 items-start mt-4">
+        
+        {/* Poster - Purple fallback style from screenshot */}
+        <div className="w-[300px] aspect-[2/3] rounded-xl overflow-hidden flex-shrink-0 bg-[#2d2546] border-none shadow-2xl flex flex-col items-center justify-center text-center p-6 relative">
+          {series.poster ? (
+            <img src={series.poster} alt={series.name} className="absolute inset-0 w-full h-full object-cover" />
+          ) : (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="currentColor" className="text-white/40 mb-4">
+                <path d="M19.82 2H4.18C2.97602 2 2 2.97602 2 4.18v15.64C2 21.024 2.97602 22 4.18 22h15.64c1.204 0 2.18-.976 2.18-2.18V4.18C22 2.97602 21.024 2 19.82 2zM7 2h1v4H7V2zm4 0h1v4h-1V2zm4 0h1v4h-1V2zm-9.5 6h13c.8284 0 1.5.6716 1.5 1.5v11c0 .8284-.6716 1.5-1.5 1.5h-13c-.8284 0-1.5-.6716-1.5-1.5v-11C4 8.6716 4.6716 8 5.5 8z" />
+              </svg>
+              <h2 className="text-white text-lg font-medium tracking-wide">{series.name}</h2>
+            </>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-transparent" />
         </div>
 
-        <div className="relative z-10 px-12 pb-12 flex gap-8 items-end w-full">
-          {/* Poster */}
-          {series.poster && (
-            <div className="w-48 aspect-[2/3] rounded-xl overflow-hidden border border-white/20 shadow-2xl flex-shrink-0 hidden md:block">
-              <img src={series.poster} alt={series.name} className="w-full h-full object-cover" />
+        {/* Details */}
+        <div className="flex flex-col flex-1 pt-2">
+          
+          <h1 className="text-4xl md:text-5xl font-sans font-bold text-white tracking-tight leading-tight mb-4">
+            {series.name} {series.year ? `(${series.year})` : ''}
+          </h1>
+
+          <div className="mb-6">
+            {series.category && (
+              <span className="px-3 py-1.5 bg-transparent border border-white/20 rounded-md text-sm font-medium text-zinc-300">
+                {series.category.name}
+              </span>
+            )}
+          </div>
+
+          {(series.description || series.director || series.actors) && (
+            <div className="flex flex-col gap-6 mb-8">
+              {series.description && (
+                <p className="text-[15px] text-zinc-300 leading-relaxed max-w-3xl">
+                  {series.description}
+                </p>
+              )}
+
+              {series.actors && (
+                <div>
+                  <h3 className="text-xs text-zinc-500 font-medium mb-1">Actors</h3>
+                  <p className="text-sm font-semibold text-zinc-200">{series.actors}</p>
+                </div>
+              )}
+
+              {series.director && (
+                <div>
+                  <h3 className="text-xs text-zinc-500 font-medium mb-1">Director</h3>
+                  <p className="text-sm font-semibold text-zinc-200">{series.director}</p>
+                </div>
+              )}
             </div>
           )}
 
-          <div className="max-w-3xl flex-1">
-            <Link href="/series" className="text-sm text-white/60 hover:text-white transition flex items-center gap-1 mb-4">
-              <ArrowLeft size={16} /> Back to Series
-            </Link>
-            <h1 className="text-5xl font-black text-white tracking-tighter mb-3">{series.name}</h1>
-            <div className="flex items-center gap-4 text-sm text-white/70 mb-4">
-              {series.year && <span>{series.year}</span>}
-              {series.rating && <span>⭐ {series.rating.toFixed(1)}</span>}
-              <span>{series.seasons?.length || 0} Seasons</span>
-              {series.category && <span className="px-2 py-0.5 bg-white/10 rounded">{series.category.name}</span>}
-            </div>
-            {series.description && (
-              <p className="text-lg text-white/80 mb-8 leading-relaxed">{series.description}</p>
-            )}
-
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={handleFavoriteToggle}
-                disabled={isDemo}
-                className={`px-6 py-3 rounded-md font-bold transition backdrop-blur-md flex items-center gap-2 border ${
-                  isFavorite 
-                    ? "bg-primary/20 border-primary text-primary hover:bg-primary/30" 
-                    : "bg-white/20 border-transparent text-white hover:bg-white/30"
-                } ${isDemo ? "opacity-50 cursor-not-allowed" : ""}`}
-                title={isDemo ? "Favorites disabled in demo mode" : ""}
-              >
-                <Heart size={20} className={isFavorite ? "fill-current" : ""} /> Favorite
-              </button>
-              <button 
-                onClick={handleWatchLaterToggle}
-                disabled={isDemo}
-                className={`px-6 py-3 rounded-md font-bold transition backdrop-blur-md flex items-center gap-2 border ${
-                  isWatchLater 
-                    ? "bg-primary/20 border-primary text-primary hover:bg-primary/30" 
-                    : "bg-white/20 border-transparent text-white hover:bg-white/30"
-                } ${isDemo ? "opacity-50 cursor-not-allowed" : ""}`}
-                title={isDemo ? "Watch Later disabled in demo mode" : ""}
-              >
-                <Clock size={20} className={isWatchLater ? "fill-current" : ""} /> Watch Later
-              </button>
-            </div>
+          <div className="flex flex-wrap items-center gap-4 mt-2">
+            <button 
+              onClick={handleFavoriteToggle}
+              disabled={isDemo}
+              className={`px-6 py-3 rounded-md font-medium text-[15px] transition flex items-center gap-2 ${
+                isFavorite 
+                  ? "bg-primary text-white hover:bg-primary/90" 
+                  : "bg-[#4d4d4d] text-white hover:bg-[#5a5a5a]"
+              } ${isDemo ? "opacity-50 cursor-not-allowed" : ""}`}
+              title={isDemo ? "Favorites disabled in demo mode" : ""}
+            >
+              {isFavorite ? <Heart className="w-5 h-5 fill-current" /> : <span className="text-xl leading-none mr-1">+</span>} 
+              {isFavorite ? "Favorited" : "Add to favorites"}
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Seasons */}
-      <div className="px-12 mt-8">
+      {/* Seasons & Episodes */}
+      <div className="max-w-6xl mt-16 pt-8 border-t border-white/10">
         <h2 className="text-2xl font-bold mb-6">Episodes</h2>
         
         {(!series.seasons || series.seasons.length === 0) ? (
-          <div className="text-secondary-foreground p-8 bg-surface rounded-xl border border-white/5">
+          <div className="text-zinc-500 py-8">
             No episodes synced yet.
           </div>
         ) : (
@@ -181,33 +192,37 @@ export default function SeriesDetailPage() {
                     <div 
                       key={ep.id} 
                       onClick={() => setActiveEpisode(ep)}
-                      className="bg-surface rounded-lg overflow-hidden border border-white/5 hover:border-white/20 transition group cursor-pointer"
+                      className="bg-[#1a1a1a] rounded-lg overflow-hidden border border-white/5 hover:border-white/20 transition group cursor-pointer flex flex-col"
                     >
-                      <div className="aspect-video bg-zinc-900 relative">
+                      <div className="aspect-video bg-[#2d2546] relative flex-shrink-0">
                         {ep.backdrop ? (
                           <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${ep.backdrop}')` }} />
                         ) : (
-                          <div className="absolute inset-0 flex items-center justify-center text-white/10">S{season.seasonNumber} E{ep.episodeNumber}</div>
+                          <div className="absolute inset-0 flex items-center justify-center text-white/20 font-medium">S{season.seasonNumber} E{ep.episodeNumber}</div>
                         )}
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
-                          <Play className="fill-white w-10 h-10 drop-shadow-xl" />
+                          <div className="bg-white rounded-full p-2 flex items-center justify-center shadow-md">
+                            <Play className="fill-black w-6 h-6 ml-1" />
+                          </div>
                         </div>
                       </div>
-                      <div className="p-4 flex justify-between items-start">
-                        <div>
-                          <div className="text-sm text-primary font-bold mb-1">Episode {ep.episodeNumber}</div>
-                          <div className="font-medium text-white line-clamp-1">{ep.title || ep.name || `Episode ${ep.episodeNumber}`}</div>
-                          {ep.duration && <div className="text-xs text-secondary-foreground mt-1">{Math.floor(ep.duration / 60)}m</div>}
+                      <div className="p-4 flex flex-col flex-1">
+                        <div className="text-xs text-zinc-400 font-medium mb-1">Episode {ep.episodeNumber}</div>
+                        <div className="font-medium text-white line-clamp-2 text-sm leading-snug flex-1">{ep.title || ep.name || `Episode ${ep.episodeNumber}`}</div>
+                        <div className="mt-3 flex items-center justify-between">
+                          {ep.duration ? (
+                            <div className="text-xs text-zinc-500">{Math.floor(ep.duration / 60)}m</div>
+                          ) : <div />}
+                          <a 
+                            href={api.downloadEpisodeUrl(ep.id)}
+                            download
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1.5 bg-white/5 hover:bg-white/10 rounded-md transition text-zinc-400 hover:text-white"
+                            title="Download Episode"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                          </a>
                         </div>
-                        <a 
-                          href={api.downloadEpisodeUrl(ep.id)}
-                          download
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-2 bg-white/5 hover:bg-white/20 rounded-md transition border border-white/10 text-white/70 hover:text-white"
-                          title="Download Episode"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                        </a>
                       </div>
                     </div>
                   ))}

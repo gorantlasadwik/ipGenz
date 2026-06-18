@@ -206,6 +206,8 @@ model Series {
   poster             String?
   backdrop           String?
   description        String?
+  director           String?
+  actors             String?
   year               Int?
   createdAt          DateTime       @default(now())
 

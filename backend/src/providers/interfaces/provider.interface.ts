@@ -47,6 +47,8 @@ export interface InternalSeries {
   poster?: string;
   backdrop?: string;
   description?: string;
+  director?: string;
+  actors?: string;
   year?: number;
 }
 
@@ -71,5 +73,6 @@ export interface ProviderAdapter {
   
   getSeriesCategories(): Promise<InternalSeriesCategory[]>;
   getSeries(): Promise<InternalSeries[]>;
+  getSeriesInfo?(seriesId: string): Promise<Partial<InternalSeries>>;
   getEpisodes(seriesId: string): Promise<InternalEpisode[]>;
 }

@@ -131,6 +131,20 @@ export class XtreamAdapter implements ProviderAdapter {
     }));
   }
 
+  async getSeriesInfo(seriesId: string): Promise<Partial<InternalSeries>> {
+    const data = await this.fetchFromApi(`get_series_info&series_id=${seriesId}`);
+    if (!data || !data.info) return {};
+    const info = data.info;
+    return {
+      description: info.plot || info.description,
+      director: info.director,
+      actors: info.cast || info.actors,
+      poster: info.cover || info.movie_image,
+      backdrop: info.backdrop_path?.[0] || info.backdrop_path,
+      year: parseInt(info.releaseDate, 10) || parseInt(info.releasedate, 10) || undefined,
+    };
+  }
+
   async getEpisodes(seriesId: string): Promise<InternalEpisode[]> {
     const data = await this.fetchFromApi(`get_series_info&series_id=${seriesId}`);
     const episodes: InternalEpisode[] = [];
