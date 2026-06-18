@@ -54,10 +54,11 @@ export class ContentController {
       try {
         let adapter;
         const p = movie.provider;
-        if (p.type === 'XTREAM') {
+        if (p.providerType === 'XTREAM') {
           const XtreamAdapter = require('../providers/adapters/xtream.adapter').XtreamAdapter;
-          adapter = new XtreamAdapter(p.url, p.username, p.password);
-        } else if (p.type === 'M3U') {
+          const { decryptString } = require('../utils/crypto.util');
+          adapter = new XtreamAdapter(p.serverUrl, p.username, decryptString(p.encryptedPassword));
+        } else if (p.providerType === 'M3U') {
           // M3U doesn't have an endpoint for extra info usually
         }
 
