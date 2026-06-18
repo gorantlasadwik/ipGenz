@@ -19,10 +19,109 @@ export class StreamService {
   ) {}
 
   /**
+   * Pure Node.js MPEG-TS PID filter for audio track selection.
+   * Unlike FFmpeg (which gets blocked by IPTV providers on Render), this uses the same
+   * Node.js HTTP proxy that already works. Reads 188-byte TS packets, parses PAT→PMT to
+   * discover video & audio PIDs, then only forwards video PID + selected audio PID.
+   */
+  async handlePidFilterStream(streamUrl: string, audioTrackIndex: number, res: Response) {
+    this.logger.log(`PID-filter stream: audioTrack=${audioTrackIndex}, url=${streamUrl}`);
+    const PACKET_SIZE = 188;
+    const SYNC_BYTE = 0x47;
+
+    let response: any;
+    try {
+      response = await firstValueFrom(
+        this.httpService.get(streamUrl, {
+          responseType: 'stream',
+          headers: { 'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16', 'Accept': '*/*' },
+        }).pipe(
+          catchError(err => { throw new HttpException('Provider Stream Offline', HttpStatus.BAD_GATEWAY); })
+        )
+      );
+    } catch (e) {
+      if (!res.headersSent) res.status(502).send('Stream Unavailable');
+      return;
+    }
+
+    res.set({
+      'Content-Type': 'video/mp2t',
+      'Cache-Control': 'no-cache, no-store',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    let buf = Buffer.alloc(0);
+    let pmtPid = -1;
+    let videoPid = -1;
+    const audioPids: number[] = [];
+    let selectedAudioPid = -1;
+    let pmtParsed = false;
+
+    const parseSection = (data: Buffer, offset: number): void => {
+      const ptr = data[offset];
+      const base = offset + 1 + ptr;
+      if (base + 3 >= data.length) return;
+      const tableId = data[base];
+      const secLen = ((data[base + 1] & 0x0F) << 8) | data[base + 2];
+      if (tableId === 0x00) {
+        for (let j = base + 8; j < base + 3 + secLen - 4; j += 4) {
+          const prog = (data[j] << 8) | data[j + 1];
+          if (prog !== 0) { pmtPid = ((data[j + 2] & 0x1F) << 8) | data[j + 3]; break; }
+        }
+      } else if (tableId === 0x02 && !pmtParsed) {
+        const progInfoLen = ((data[base + 10] & 0x0F) << 8) | data[base + 11];
+        let k = base + 12 + progInfoLen;
+        while (k < base + 3 + secLen - 4 && k + 4 < data.length) {
+          const streamType = data[k];
+          const esPid = ((data[k + 1] & 0x1F) << 8) | data[k + 2];
+          const esLen = ((data[k + 3] & 0x0F) << 8) | data[k + 4];
+          if ([0x01, 0x02, 0x1B, 0x24].includes(streamType) && videoPid === -1) videoPid = esPid;
+          if ([0x03, 0x04, 0x0F, 0x11, 0x81, 0x06, 0x87].includes(streamType)) audioPids.push(esPid);
+          k += 5 + esLen;
+        }
+        if (audioPids.length > 0) {
+          selectedAudioPid = audioPids[Math.min(audioTrackIndex, audioPids.length - 1)];
+          this.logger.log(`PID filter: videoPid=${videoPid}, audioPids=${JSON.stringify(audioPids)}, selected=${selectedAudioPid}`);
+          pmtParsed = true;
+        }
+      }
+    };
+
+    response.data.on('data', (chunk: Buffer) => {
+      buf = Buffer.concat([buf, chunk]);
+      while (buf.length >= PACKET_SIZE) {
+        if (buf[0] !== SYNC_BYTE) {
+          const idx = buf.indexOf(SYNC_BYTE);
+          if (idx === -1) { buf = Buffer.alloc(0); break; }
+          buf = buf.subarray(idx); continue;
+        }
+        const pkt = buf.subarray(0, PACKET_SIZE);
+        buf = buf.subarray(PACKET_SIZE);
+        const pid = ((pkt[1] & 0x1F) << 8) | pkt[2];
+        const pusi = (pkt[1] & 0x40) !== 0;
+        const afCtrl = (pkt[3] & 0x30) >> 4;
+        let payloadOff = 4;
+        if (afCtrl === 3) payloadOff += (pkt[4] + 1);
+        if (pid === 0 && pusi && pmtPid === -1) parseSection(pkt, payloadOff);
+        if (pid === pmtPid && pusi && !pmtParsed) parseSection(pkt, payloadOff);
+        // Forward: PAT, null, PMT, video, selected audio; drop other audio PIDs
+        const pass = pid === 0 || pid === 0x1FFF || pid === pmtPid || pid === videoPid
+          || !pmtParsed || pid === selectedAudioPid;
+        if (pass && !res.writableEnded) res.write(pkt);
+      }
+    });
+
+    response.data.on('end', () => { if (!res.writableEnded) res.end(); });
+    response.data.on('error', (e: any) => { this.logger.error('Stream error:', e.message); });
+    res.on('close', () => { try { response.data.destroy(); } catch (_) {} });
+  }
+
+  /**
    * Spawns an on-the-fly FFmpeg transcoding process to convert unsupported codecs
    * and pipes the output directly to the HTTP response.
    */
   async handleTranscodeStream(streamUrl: string, transcodeType: 'AUDIO' | 'VIDEO', res: Response, audioTrack?: number, startTime?: number) {
+
     this.logger.log(`Transcoding stream on-the-fly. Type: ${transcodeType}, URL: ${streamUrl}, AudioTrack: ${audioTrack !== undefined ? audioTrack : 'default'}, Start: ${startTime || 0}`);
 
     const ffmpegPath = ffmpegStatic;
@@ -126,10 +225,12 @@ export class StreamService {
       }
     }
 
-    // If a specific audio track is requested, we MUST transcode/remux using FFmpeg to map that specific track.
+    // If a specific audio track is requested, use the Node.js PID filter instead of FFmpeg.
+    // FFmpeg gets blocked by IPTV providers on cloud datacenters (Render), but the Node.js
+    // HTTP proxy works fine. The PID filter reads 188-byte TS packets and drops all audio
+    // PIDs except the requested one — no FFmpeg needed!
     if (audioTrack !== undefined) {
-      const transcodeType = (profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO';
-      return this.handleTranscodeStream(streamUrl, transcodeType, res, audioTrack);
+      return this.handlePidFilterStream(streamUrl, audioTrack, res);
     }
 
     // If the channel profile specifies that transcoding is already required for video or audio, we transcode.

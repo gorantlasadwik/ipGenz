@@ -32,13 +32,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   const rawSourceUrl = firstSource?.src || ''
   // Browser-native audio codecs (no transcoding needed)
   const BROWSER_NATIVE_AUDIO = ['AAC', 'MP3', 'OPUS', 'VORBIS']
-  // Only append audioTrack when backend transcoding is needed (non-native codecs like AC3/MP2)
-  // For native codecs, we switch client-side via mpegts.js currentAudioStream — no URL change!
-  const sourceUrl = isTranscodingRequired
+  // When user picks a track, append ?audioTrack=X to trigger backend Node.js PID filter
+  const sourceUrl = selectedAudioTrackId !== null || isTranscodingRequired
     ? `${rawSourceUrl}${rawSourceUrl.includes('?') ? '&' : '?'}audioTrack=${selectedAudioTrackId ?? 0}`
     : rawSourceUrl
   const sourceType = firstSource?.type || ''
-  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || isTranscodingRequired
+  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || isTranscodingRequired || selectedAudioTrackId !== null
 
   // Parse MPEG-TS PMT tables from raw stream bytes to detect audio tracks client-side.
   // This runs entirely in the browser using the user's home IP - no backend needed!
@@ -268,22 +267,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
 
   const selectAudioTrack = (id: number) => {
     setAudioTracks(prev => prev.map(t => ({ ...t, active: t.id === id })))
-
-    // For live IPTV streams using mpegts.js with NATIVE codecs (AAC, MP3):
-    // Switch audio tracks DIRECTLY in the browser via mpegts.js API.
-    // Do NOT change selectedAudioTrackId — that would change sourceUrl and destroy the player!
-    if (mpegtsPlayerRef.current && !isTranscodingRequiredRef.current) {
-      try {
-        mpegtsPlayerRef.current.currentAudioStream = id
-        console.log(`[mpegts] Switched to audio stream ${id} client-side (native codec)`)
-      } catch (e) {
-        console.warn('[mpegts] Failed to switch audio stream client-side:', e)
-      }
-      return // Done — no state change, no URL change, no player recreation
-    }
-
-    // For non-native codecs (AC3/MP2) or Video.js: change selectedAudioTrackId
-    // which updates sourceUrl with ?audioTrack=X and triggers backend FFmpeg transcoding
+    // Always use backend PID filter for track switching on live streams.
+    // The PID filter uses Node.js HTTP proxy (not FFmpeg) so it works on Render.
+    // setSelectedAudioTrackId triggers a sourceUrl change → player reloads with ?audioTrack=X
     setSelectedAudioTrackId(id)
     if (playerRef.current) {
       handleSelectVideoJsAudio(id)
