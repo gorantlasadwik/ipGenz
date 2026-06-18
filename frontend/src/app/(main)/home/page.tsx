@@ -64,7 +64,7 @@ export default function HomePage() {
         <div className="absolute inset-0 z-0">
           <div 
             className="absolute inset-0 bg-cover bg-center transition-transform duration-1000 scale-105"
-            style={{ backgroundImage: `url('${featured.backdrop || "https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=2525&auto=format&fit=crop"}')` }}
+            style={{ backgroundImage: `url('${featured.backdrop || featured.poster || "https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=2525&auto=format&fit=crop"}')` }}
           />
           {/* Dark gradient vignette matching the screenshot */}
           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
@@ -104,7 +104,7 @@ export default function HomePage() {
 
         {/* Horizontal Carousels */}
         <div className="flex flex-col gap-10 mt-auto">
-          {continueWatching.length > 0 && <ContentRail title="CONTINUE WATCHING" items={continueWatching.map(cw => ({...cw.content, id: cw.contentId, type: cw.contentType}))} type="mixed" />}
+          {continueWatching.length > 0 && <ContentRail title="CONTINUE WATCHING" items={continueWatching.map(cw => ({...cw.content, name: cw.content.title, poster: cw.content.posterUrl, id: cw.contentId, type: cw.contentType}))} type="mixed" />}
           {movies.length > 1 && <ContentRail title="RECOMMENDED MOVIES" items={movies.slice(1)} type="movie" />}
           {series.length > 0 && <ContentRail title="RECOMMENDED SERIES" items={series} type="series" />}
           {channels.length > 0 && (
