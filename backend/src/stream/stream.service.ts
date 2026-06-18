@@ -469,12 +469,56 @@ export class StreamService {
   }
 
   // --- DOWNLOAD PROXIES ---
+  private async checkAndIncrementDownloadLimit(userId: string) {
+    const user: any = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.isPremiumTrial) {
+      const now = new Date();
+      let shouldReset = true;
+      if (user.lastDownloadAt) {
+        const lastDownloadDate = new Date(user.lastDownloadAt);
+        const isSameDay =
+          now.getUTCFullYear() === lastDownloadDate.getUTCFullYear() &&
+          now.getUTCMonth() === lastDownloadDate.getUTCMonth() &&
+          now.getUTCDate() === lastDownloadDate.getUTCDate();
+
+        if (isSameDay) {
+          shouldReset = false;
+        }
+      }
+
+      if (!shouldReset && user.downloadsToday >= 1) {
+        throw new HttpException(
+          'Premium trial accounts are limited to 1 download per day.',
+          HttpStatus.FORBIDDEN
+        );
+      }
+
+      // Update download metrics
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          lastDownloadAt: now,
+          downloadsToday: shouldReset ? 1 : user.downloadsToday + 1,
+        } as any,
+      });
+    }
+  }
+
   async proxyDownloadMovie(movieId: string, userId: string, res: Response) {
     const movie = await this.prisma.movie.findFirst({
       where: { id: movieId, provider: { userId } },
     });
     if (!movie) throw new NotFoundException('Movie not found');
     
+    await this.checkAndIncrementDownloadLimit(userId);
+
     // Instead of streaming and transcode, we just redirect or pipe with Content-Disposition
     // But since the PRD says "Downloaded files must be stored: downloads/{user_id}/", 
     // a real implementation would use ffmpeg to save to disk. 
@@ -506,6 +550,8 @@ export class StreamService {
     });
     if (!episode) throw new NotFoundException('Episode not found');
     
+    await this.checkAndIncrementDownloadLimit(userId);
+
     const filename = `${episode.season.series.name.replace(/[^a-z0-9]/gi, '_')}_S${episode.season.seasonNumber}_E${episode.episodeNumber}.mp4`;
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', 'video/mp4');

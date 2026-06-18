@@ -29,6 +29,11 @@ model User {
   assignedIp       String?
   trialExpiry      DateTime?
 
+  // Concurrent Session & Download Limits
+  currentStreamSession String?
+  lastDownloadAt        DateTime?
+  downloadsToday        Int       @default(0)
+
   profiles         Profile[]
   providers        Provider[]
 }

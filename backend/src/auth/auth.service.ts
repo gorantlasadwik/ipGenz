@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, ConflictException, ServiceUnavailabl
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../utils/mail.service';
 
@@ -49,7 +50,20 @@ export class AuthService {
   }
 
   async login(user: any) {
-    const payload = { email: user.email, sub: user.id };
+    const sessionToken = user.isPremiumTrial ? crypto.randomUUID() : undefined;
+    if (sessionToken) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { currentStreamSession: sessionToken }
+      });
+    }
+
+    const payload = {
+      email: user.email,
+      sub: user.id,
+      ...(sessionToken ? { sessionToken } : {})
+    };
+
     return {
       access_token: this.jwtService.sign(payload),
       user: {

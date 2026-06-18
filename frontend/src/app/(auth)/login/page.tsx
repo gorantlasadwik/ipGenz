@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [isPremiumLogin, setIsPremiumLogin] = useState(false)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,7 +53,9 @@ export default function LoginPage() {
 
       {/* Login Form */}
       <div className="relative z-20 w-full max-w-md p-10 bg-black/70 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl">
-        <h1 className="text-4xl font-black text-white mb-8 tracking-tight">Sign In</h1>
+        <h1 className="text-4xl font-black text-white mb-8 tracking-tight">
+          {isPremiumLogin ? "Premium Sign In" : "Sign In"}
+        </h1>
         
         {error && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg mb-6 text-sm font-medium">
@@ -62,14 +65,16 @@ export default function LoginPage() {
 
         <form className="space-y-6" onSubmit={handleLogin}>
           <div>
-            <label className="block text-sm font-medium text-white/70 mb-2">Email Address</label>
+            <label className="block text-sm font-medium text-white/70 mb-2">
+              {isPremiumLogin ? "Premium Trial Username" : "Email Address"}
+            </label>
             <input 
-              type="email"
+              type={isPremiumLogin ? "text" : "email"}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-              placeholder="name@example.com"
+              placeholder={isPremiumLogin ? "Enter 15-digit username" : "name@example.com"}
             />
           </div>
           <div>
@@ -93,11 +98,27 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-8 text-white/50 text-sm">
-          New to IPGENZ?{' '}
-          <Link href="/signup" className="text-white hover:text-primary transition-colors font-medium">
-            Sign up now.
-          </Link>
+        <div className="mt-8 flex flex-col gap-3 text-sm">
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsPremiumLogin(!isPremiumLogin);
+                setEmail("");
+                setPassword("");
+                setError("");
+              }}
+              className="text-primary hover:text-primary/80 transition-colors font-semibold"
+            >
+              {isPremiumLogin ? "Regular User? Sign in here" : "Premium Trial User? Sign in here"}
+            </button>
+          </div>
+          <div className="text-white/50">
+            New to IPGENZ?{' '}
+            <Link href="/signup" className="text-white hover:text-primary transition-colors font-medium">
+              Sign up now.
+            </Link>
+          </div>
         </div>
       </div>
     </div>

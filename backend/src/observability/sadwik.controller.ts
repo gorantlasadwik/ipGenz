@@ -580,7 +580,7 @@ export class SadwikController {
 
   @Get('premium-provider')
   async getPremiumProvider() {
-    const provider = await this.prisma.trialProvider.findFirst();
+    const provider = await (this.prisma as any).trialProvider.findFirst();
     if (!provider) return null;
 
     return {
@@ -596,7 +596,7 @@ export class SadwikController {
 
   @Post('premium-provider')
   async setPremiumProvider(@Body() body: any) {
-    const existing = await this.prisma.trialProvider.findFirst();
+    const existing = await (this.prisma as any).trialProvider.findFirst();
 
     const data = {
       providerName: body.providerName?.trim() || 'Premium Trial Master',
@@ -609,12 +609,12 @@ export class SadwikController {
 
     let result;
     if (existing) {
-      result = await this.prisma.trialProvider.update({
+      result = await (this.prisma as any).trialProvider.update({
         where: { id: existing.id },
         data,
       });
     } else {
-      result = await this.prisma.trialProvider.create({
+      result = await (this.prisma as any).trialProvider.create({
         data,
       });
     }

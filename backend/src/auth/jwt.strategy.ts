@@ -17,9 +17,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    const user = await this.usersService.findOne(payload.email);
+    const user: any = await this.usersService.findOne(payload.email);
     if (!user) {
       throw new UnauthorizedException();
+    }
+    if (user.isPremiumTrial) {
+      if (!payload.sessionToken || payload.sessionToken !== user.currentStreamSession) {
+        throw new UnauthorizedException('Session expired: logged in on another device');
+      }
     }
     // Return standard user payload
     return { userId: payload.sub, email: payload.email };

@@ -1,5 +1,21 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+const originalFetch = typeof window !== 'undefined' ? window.fetch : globalThis.fetch;
+const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const res = await originalFetch(input, init);
+  if (res.status === 401) {
+    if (typeof window !== 'undefined' && localStorage.getItem('token')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('profileId');
+      localStorage.removeItem('isDemo');
+      localStorage.removeItem('isPremiumTrial');
+      window.location.href = '/login';
+    }
+    throw new Error('Unauthorized');
+  }
+  return res;
+};
+
 function getToken() {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('token');

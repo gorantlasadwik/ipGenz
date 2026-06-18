@@ -60,14 +60,14 @@ export class UsersService implements OnModuleInit {
 
   async findByTrialUsername(trialUsername: string) {
     return this.prisma.user.findUnique({
-      where: { trialUsername },
+      where: { trialUsername } as any,
     });
   }
 
   async updateAssignedIp(id: string, assignedIp: string) {
     return this.prisma.user.update({
       where: { id },
-      data: { assignedIp },
+      data: { assignedIp } as any,
     });
   }
 }
