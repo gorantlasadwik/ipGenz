@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { Play, Heart, Clock, ArrowLeft } from "lucide-react"
+import { Play, Heart, Clock, ArrowLeft, Tv } from "lucide-react"
 import Link from "next/link"
 import { api, isDemoUser } from "@/lib/api"
 import { VodPlayer } from "@/components/VodPlayer"
+import { VideoPlayer } from "@/components/VideoPlayer"
 
 export default function SeriesDetailPage() {
   const params = useParams()
   const [series, setSeries] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [activeEpisode, setActiveEpisode] = useState<any>(null)
+  const [selectedPlayerType, setSelectedPlayerType] = useState<'vod' | 'live' | null>(null)
   const [isFavorite, setIsFavorite] = useState(false)
   const [isWatchLater, setIsWatchLater] = useState(false)
   const [isDemo, setIsDemo] = useState(false)
@@ -80,7 +82,7 @@ export default function SeriesDetailPage() {
     )
   }
 
-  if (activeEpisode) {
+  if (activeEpisode && selectedPlayerType === 'vod') {
     return (
       <div className="fixed inset-0 z-50 bg-black flex flex-col justify-center items-center">
         <VodPlayer 
@@ -90,11 +92,62 @@ export default function SeriesDetailPage() {
           contentId={activeEpisode.id}
           title={series.name}
           subtitle={`Season ${series.seasons?.find((s: any) => s.episodes?.some((e: any) => e.id === activeEpisode.id))?.seasonNumber || 1}, Episode ${activeEpisode.episodeNumber}: ${activeEpisode.title || activeEpisode.name || ''}`}
-          onClose={() => setActiveEpisode(null)}
+          onClose={() => { setActiveEpisode(null); setSelectedPlayerType(null); }}
           seriesData={series}
           durationSec={activeEpisode.duration}
           onPlayEpisode={(nextEp) => setActiveEpisode(nextEp)}
         />
+      </div>
+    )
+  }
+
+  if (activeEpisode && selectedPlayerType === 'live') {
+    const videoJsOptions = {
+      autoplay: true,
+      controls: true,
+      responsive: true,
+      fluid: true,
+      sources: [{
+        src: api.streamEpisodeUrl(activeEpisode.id),
+        type: 'video/mp4'
+      }]
+    };
+    return (
+      <div className="fixed inset-0 z-50 bg-black flex flex-col">
+        <div className="p-4 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-10">
+          <h3 className="text-white font-bold ml-2">
+            {series.name} - Season {series.seasons?.find((s: any) => s.episodes?.some((e: any) => e.id === activeEpisode.id))?.seasonNumber || 1}, Episode {activeEpisode.episodeNumber}
+          </h3>
+          <button onClick={() => { setActiveEpisode(null); setSelectedPlayerType(null); }} className="text-white hover:text-primary p-2 bg-black/50 rounded-full transition">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+        <div className="flex-1 mt-16 px-4 pb-4">
+          <div className="w-full h-full max-w-6xl mx-auto rounded-xl overflow-hidden bg-black/50 flex items-center justify-center">
+            <VideoPlayer options={videoJsOptions} />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (activeEpisode && !selectedPlayerType) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="bg-[#1a1a1a] p-8 rounded-xl max-w-md w-full border border-white/10 shadow-2xl">
+          <h2 className="text-2xl font-bold mb-6 text-white text-center">Choose Video Player</h2>
+          <div className="flex flex-col gap-4">
+            <button onClick={() => setSelectedPlayerType('vod')} className="bg-[#2d2546] hover:bg-[#3d3556] p-4 rounded-lg text-left transition border border-transparent hover:border-white/20">
+              <div className="font-bold text-white mb-1 flex items-center gap-2"><Play size={18} /> Standard VOD Player</div>
+              <div className="text-sm text-white/60">Optimized for movies and series, supports resuming, subtitles, and standard codecs.</div>
+            </button>
+            <button onClick={() => setSelectedPlayerType('live')} className="bg-white/5 hover:bg-white/10 p-4 rounded-lg text-left transition border border-white/10 hover:border-white/30">
+              <div className="font-bold text-white mb-1 flex items-center gap-2"><Tv size={18} /> Live TV Player (Advanced)</div>
+              <div className="text-sm text-white/60">Uses the live TV engine. Better for complex audio/video codecs or direct streams.</div>
+            </button>
+          </div>
+          <button onClick={() => { setActiveEpisode(null); setSelectedPlayerType(null); }} className="mt-6 w-full py-3 text-white/50 hover:text-white transition font-medium">Cancel</button>
+        </div>
       </div>
     )
   }
