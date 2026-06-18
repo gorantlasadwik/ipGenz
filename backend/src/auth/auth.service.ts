@@ -10,10 +10,35 @@ export class AuthService {
     private jwtService: JwtService
   ) {}
 
-  async validateUser(email: string, pass: string): Promise<any> {
+  async validateUser(email: string, pass: string, ipAddress?: string): Promise<any> {
+    // Check if it's a 15-digit trial login
+    if (email.length === 15 && /^\d+$/.test(email)) {
+      const trialUser = await this.usersService.findByTrialUsername(email);
+      if (trialUser && trialUser.trialPassword === pass) {
+        // Check Expiry
+        if (trialUser.trialExpiry && new Date() > trialUser.trialExpiry) {
+          throw new UnauthorizedException('Trial has expired. Please purchase a subscription to continue.');
+        }
+
+        // Strict 1 IP enforcement
+        if (trialUser.assignedIp) {
+          if (ipAddress && trialUser.assignedIp !== ipAddress) {
+            throw new UnauthorizedException('This account is locked to a different IP address.');
+          }
+        } else if (ipAddress) {
+          // Lock to this IP
+          await this.usersService.updateAssignedIp(trialUser.id, ipAddress);
+        }
+
+        const { passwordHash, trialPassword, ...result } = trialUser;
+        return result;
+      }
+      return null;
+    }
+
     const user = await this.usersService.findOne(email);
-    if (user && await bcrypt.compare(pass, user.passwordHash)) {
-      const { passwordHash, ...result } = user;
+    if (user && user.passwordHash && await bcrypt.compare(pass, user.passwordHash)) {
+      const { passwordHash, trialPassword, ...result } = user;
       return result;
     }
     return null;
@@ -26,7 +51,8 @@ export class AuthService {
       user: {
         id: user.id,
         email: user.email,
-        isDemo: user.email === 'demo@ipgenz.com'
+        isDemo: user.email === 'demo@ipgenz.com',
+        isPremiumTrial: user.isPremiumTrial || false
       }
     };
   }
@@ -47,5 +73,24 @@ export class AuthService {
 
     const { passwordHash: _, ...result } = newUser;
     return result;
+  }
+
+  async requestTrial(email: string) {
+    let existingUser = await this.usersService.findOne(email);
+    if (existingUser) {
+      if (existingUser.trialRequested || existingUser.isPremiumTrial) {
+        throw new ConflictException('Trial already requested or active for this email');
+      }
+      // Update existing user
+      await this.usersService.update(existingUser.id, { trialRequested: true });
+      return { success: true };
+    }
+
+    // Create new user with no password hash
+    await this.usersService.create({
+      email,
+      trialRequested: true,
+    });
+    return { success: true };
   }
 }

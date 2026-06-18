@@ -154,6 +154,12 @@ export default function AdminLayout({
             label="Infrastructure" 
           />
           <SidebarLink 
+            active={pathname === "/sadwik/premium"} 
+            href="/sadwik/premium" 
+            icon={<ShieldAlert size={18} />} 
+            label="Premium Subscriptions" 
+          />
+          <SidebarLink 
             active={pathname === "/sadwik/settings"} 
             href="/sadwik/settings" 
             icon={<Settings size={18} />} 

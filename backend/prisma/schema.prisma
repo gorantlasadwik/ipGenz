@@ -15,13 +15,22 @@ datasource db {
 // -----------------------------------------------------------------------------
 
 model User {
-  id             String    @id @default(uuid())
-  email          String    @unique
-  passwordHash   String
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  profiles       Profile[]
-  providers      Provider[]
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Premium Trial Fields
+  isPremiumTrial   Boolean   @default(false)
+  trialRequested   Boolean   @default(false)
+  trialUsername    String?   @unique
+  trialPassword    String?
+  assignedIp       String?
+  trialExpiry      DateTime?
+
+  profiles         Profile[]
+  providers        Provider[]
 }
 
 enum ProfileType {

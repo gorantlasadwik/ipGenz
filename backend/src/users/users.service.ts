@@ -49,4 +49,24 @@ export class UsersService implements OnModuleInit {
       data,
     });
   }
+
+  async update(id: string, data: Prisma.UserUpdateInput) {
+    return this.prisma.user.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async findByTrialUsername(trialUsername: string) {
+    return this.prisma.user.findUnique({
+      where: { trialUsername },
+    });
+  }
+
+  async updateAssignedIp(id: string, assignedIp: string) {
+    return this.prisma.user.update({
+      where: { id },
+      data: { assignedIp },
+    });
+  }
 }

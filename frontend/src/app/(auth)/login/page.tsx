@@ -26,6 +26,12 @@ export default function LoginPage() {
       } else {
         localStorage.setItem("isDemo", "false")
       }
+
+      if (data.user?.isPremiumTrial) {
+        localStorage.setItem("isPremiumTrial", "true")
+      } else {
+        localStorage.setItem("isPremiumTrial", "false")
+      }
       
       router.push("/profiles")
     } catch (err: any) {

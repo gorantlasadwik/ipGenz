@@ -65,6 +65,7 @@ export default function PremiumLandingPage() {
       } else {
         localStorage.setItem("isDemo", "false")
       }
+      localStorage.setItem("isPremiumTrial", "false")
       router.push("/profiles")
     } catch (err) {
       console.error("Failed to start demo:", err)
@@ -138,18 +139,27 @@ export default function PremiumLandingPage() {
             IPGenz brings all your entertainment together with a powerful set of features designed for the ultimate streaming experience.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-4 mb-8">
-            <Link href="/signup" className="bg-white hover:bg-zinc-200 text-black px-8 py-4 rounded-full font-bold text-lg transition flex items-center justify-center gap-2 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">
-              Get Started for Free
-            </Link>
-            <button 
-              onClick={handleDemoLogin}
-              disabled={isDemoLoading}
-              className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-full font-bold text-lg transition shadow-[0_0_30px_-5px_rgba(229,9,20,0.6)] flex items-center justify-center gap-2 disabled:opacity-50"
+          <div className="flex flex-col gap-4 mb-8 w-full max-w-[600px] mx-auto">
+            <div className="flex flex-col sm:flex-row gap-4 w-full">
+              <Link href="/signup" className="flex-1 bg-white hover:bg-zinc-200 text-black px-8 py-4 rounded-full font-bold text-lg transition flex items-center justify-center gap-2 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">
+                Get Started for Free
+              </Link>
+              <button 
+                onClick={handleDemoLogin}
+                disabled={isDemoLoading}
+                className="flex-1 bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-full font-bold text-lg transition shadow-[0_0_30px_-5px_rgba(229,9,20,0.6)] flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Sparkles className="w-5 h-5" />
+                {isDemoLoading ? "Loading Demo..." : "Try Demo Instance"}
+              </button>
+            </div>
+            
+            <Link 
+              href="/request-trial" 
+              className="w-full bg-zinc-900 hover:bg-zinc-800 border border-white/10 hover:border-white/20 text-white px-8 py-4 rounded-full font-bold text-lg transition flex items-center justify-center gap-2 shadow-xl"
             >
-              <Sparkles className="w-5 h-5" />
-              {isDemoLoading ? "Loading Demo..." : "Try Demo Instance"}
-            </button>
+              No IPTV Provider? Try Us
+            </Link>
           </div>
         </div>
       </section>

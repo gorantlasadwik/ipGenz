@@ -40,6 +40,36 @@ export const api = {
     return res.json();
   },
 
+  async requestPremiumTrial(email: string) {
+    const res = await fetch(`${API_BASE}/auth/request-trial`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw { response: { data: { message: err.message || 'Failed to request trial' } } };
+    }
+    return res.json();
+  },
+
+  // ─── USERS / PREMIUM TRIALS ───────────────────────────────────────────────
+  async getPremiumTrials() {
+    const res = await fetch(`${API_BASE}/users/premium-trials`, { headers: authHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch premium trials');
+    return res.json();
+  },
+
+  async generatePremiumTrial(userId: string, masterProviderId: string) {
+    const res = await fetch(`${API_BASE}/users/premium-trials/generate`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ userId, masterProviderId }),
+    });
+    if (!res.ok) throw new Error('Failed to generate trial');
+    return res.json();
+  },
+
   // ─── PROFILES ───────────────────────────────────────────────────────────
   async getProfiles() {
     const res = await fetch(`${API_BASE}/profiles`, { headers: authHeaders() });

@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
-import { Search, Bell, User, MonitorPlay, LogOut, Settings, Users, Database, Heart, History, Clock } from "lucide-react"
+import { Search, Bell, User, MonitorPlay, LogOut, Settings, Users, Database, Heart, History, Clock, Zap } from "lucide-react"
 import { api } from "@/lib/api"
 
 export function TopNav() {
@@ -12,8 +12,15 @@ export function TopNav() {
   const [profileOpen, setProfileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notifications, setNotifications] = useState<any[]>([])
+  const [isPremiumTrial, setIsPremiumTrial] = useState(false)
   
   const currentProfileId = typeof window !== 'undefined' ? localStorage.getItem("profileId") : null;
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsPremiumTrial(localStorage.getItem("isPremiumTrial") === "true")
+    }
+  }, [])
 
   useEffect(() => {
     if (currentProfileId) {
@@ -171,14 +178,23 @@ export function TopNav() {
                     <p className="font-bold text-sm">Account</p>
                   </div>
                   
-                  <Link href="/providers" className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/10 transition">
-                    <Database size={16} className="text-primary" /> Providers
-                  </Link>
+                  {!isPremiumTrial && (
+                    <>
+                      <Link href="/providers" className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/10 transition">
+                        <Database size={16} className="text-primary" /> Providers
+                      </Link>
+                      <Link href="/settings" className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/10 transition">
+                        <Settings size={16} /> Settings
+                      </Link>
+                    </>
+                  )}
+                  {isPremiumTrial && (
+                    <Link href="/subscription" className="flex items-center gap-3 px-4 py-2 text-sm text-yellow-500 hover:bg-white/10 transition">
+                      <Zap size={16} className="text-yellow-500" /> Upgrade Plan
+                    </Link>
+                  )}
                   <Link href="/profiles" className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/10 transition">
                     <Users size={16} /> Switch Profile
-                  </Link>
-                  <Link href="/settings" className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/10 transition">
-                    <Settings size={16} /> Settings
                   </Link>
                   
                   <div className="h-px bg-white/10 my-2" />
