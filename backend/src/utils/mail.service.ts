@@ -52,8 +52,9 @@ export class MailService {
         `,
       });
       this.logger.log(`Sent trial credentials email to ${toEmail}`);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Failed to send email to ${toEmail}:`, error);
+      throw new Error(`SMTP Error from Render: ${error.message}. Please check your Render Environment Variables!`);
     }
   }
 }
