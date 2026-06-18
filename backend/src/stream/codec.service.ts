@@ -44,8 +44,8 @@ export class CodecService implements OnModuleInit {
   async probeStream(streamUrl: string): Promise<CodecProbeResult> {
     return new Promise((resolve) => {
       const ffprobePath = ffprobeStatic.path;
-      // Timeout probe after 12 seconds to prevent blocking threads
-      const cmd = `"${ffprobePath}" -v quiet -print_format json -show_format -show_streams -timeout 8000000 "${streamUrl}"`;
+      // Limit probesize and analyzeduration to prevent hanging on live streams, timeout after 8s
+      const cmd = `"${ffprobePath}" -v quiet -print_format json -show_format -show_streams -analyzeduration 5000000 -probesize 5000000 -timeout 8000000 "${streamUrl}"`;
 
       exec(cmd, (error, stdout) => {
         if (error) {
