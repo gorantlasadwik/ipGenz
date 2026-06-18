@@ -121,10 +121,14 @@ export class StreamService {
     }
 
     // If a specific audio track is requested, we MUST transcode/remux using FFmpeg to map that specific track.
-    // If the channel profile specifies that transcoding is already required for video or audio, we transcode.
     if (audioTrack !== undefined) {
       const transcodeType = (profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO';
       return this.handleTranscodeStream(streamUrl, transcodeType, res, audioTrack);
+    }
+
+    // If the channel profile specifies that transcoding is already required for video or audio, we transcode.
+    if (profile && profile.transcodingRequired && profile.transcodeType) {
+      return this.handleTranscodeStream(streamUrl, profile.transcodeType as any, res);
     }
 
     try {
