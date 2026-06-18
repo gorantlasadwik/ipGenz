@@ -2,13 +2,15 @@ import { Controller, Get, Post, Body, UseGuards, Request, ForbiddenException, No
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../utils/mail.service';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(
     private usersService: UsersService,
-    private prisma: PrismaService
+    private prisma: PrismaService,
+    private mailService: MailService
   ) {}
 
   @Get('premium-trials')
@@ -89,6 +91,11 @@ export class UsersController {
         status: 'ACTIVE'
       }
     });
+
+    // Automatically email the user the 1-day trial credentials
+    if (trialUser.email) {
+      await this.mailService.sendTrialCredentials(trialUser.email, trialUsername, trialPassword);
+    }
 
     return { success: true, trialUsername, trialPassword, trialExpiry };
   }
