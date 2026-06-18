@@ -167,13 +167,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
                 label: `Track ${s.id + 1} (${s.language.toUpperCase()}) [${s.codec}]`,
                 active: s.id === 0
               })))
-              // If ANY detected audio codec is non-native, we must transcode via backend
-              const needsTranscode = parsed.some(s => !BROWSER_NATIVE_AUDIO.includes(s.codec.toUpperCase()))
-              if (needsTranscode) {
-                console.log('[VideoPlayer] Non-native audio codec detected, enabling backend transcoding...')
-                isTranscodingRequiredRef.current = true
-                setIsTranscodingRequired(true)
-              }
+              // Show the detected tracks for informational purposes
+              // NOTE: Do NOT auto-enable backend transcoding here — if Render can't reach
+              // the IPTV provider (IP blocked), forcing FFmpeg transcoding kills the video too!
             }
           }
           if (data && data.transcodingRequired) {
@@ -189,12 +185,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
               label: `Track ${s.id + 1} (${s.language.toUpperCase()}) [${s.codec}]`,
               active: s.id === 0
             })))
-            const needsTranscode = parsed.some(s => !BROWSER_NATIVE_AUDIO.includes(s.codec.toUpperCase()))
-            if (needsTranscode) {
-              console.log('[VideoPlayer] Non-native audio codec detected, enabling backend transcoding...')
-              isTranscodingRequiredRef.current = true
-              setIsTranscodingRequired(true)
-            }
+            // Show tracks for informational purposes only — don't force transcoding
+            // as that would break video playback if the backend can't reach the provider
           }
         });
     }
