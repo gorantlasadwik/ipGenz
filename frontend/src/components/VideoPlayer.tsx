@@ -110,7 +110,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
         }
         setAudioTracks(list)
       } else {
-        setAudioTracks([{ id: 0, label: 'Default Audio', active: true }])
+        setAudioTracks(prev => {
+          if (prev.length > 0) return prev;
+          return [{ id: 0, label: 'Default Audio', active: true }];
+        })
       }
     } catch (e) {
       console.warn("Failed to read videojs audio tracks (player may be destroyed):", e)
@@ -131,15 +134,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   }
 
   const selectAudioTrack = (id: number) => {
-    if (isMpegTs) {
-      setSelectedAudioTrackId(id)
-      setAudioTracks(prev => prev.map(t => ({
-        ...t,
-        active: t.id === id
-      })))
-    } else {
-      handleSelectVideoJsAudio(id)
-    }
+    setSelectedAudioTrackId(id)
+    setAudioTracks(prev => prev.map(t => ({
+      ...t,
+      active: t.id === id
+    })))
   }
 
   useEffect(() => {
