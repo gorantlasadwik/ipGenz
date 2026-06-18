@@ -40,10 +40,15 @@ export default function ProfilesPage() {
 
   const handleCreateProfile = async () => {
     if (!newName.trim()) return
-    const profile = await api.createProfile({ name: newName, profileType: "ADULT" })
-    setProfiles([...profiles, profile])
-    setNewName("")
-    setShowCreate(false)
+    try {
+      const profile = await api.createProfile({ name: newName, profileType: "ADULT" })
+      setProfiles([...profiles, profile])
+      setNewName("")
+      setShowCreate(false)
+    } catch (error: any) {
+      console.error(error)
+      alert(error.message || "Failed to create profile")
+    }
   }
 
   const handleProfileClick = (p: Profile) => {
