@@ -28,11 +28,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   // Compute isMpegTs synchronously during render
   const firstSource = options.sources?.[0]
   const rawSourceUrl = firstSource?.src || ''
-  const sourceUrl = selectedAudioTrackId !== null 
-    ? `${rawSourceUrl}${rawSourceUrl.includes('?') ? '&' : '?'}audioTrack=${selectedAudioTrackId}`
-    : rawSourceUrl
+  // For mpegts.js (live TV), audio switching is done client-side via mpegts.js API.
+  // We only append audioTrack to the URL for Video.js streams (VOD) that need backend transcoding.
+  const sourceUrl = rawSourceUrl
   const sourceType = firstSource?.type || ''
-  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || selectedAudioTrackId !== null || isTranscodingRequired
+  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || isTranscodingRequired
 
   // Reset states when the stream source changes and fetch tracks from backend
   useEffect(() => {
@@ -134,11 +134,26 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   }
 
   const selectAudioTrack = (id: number) => {
+    setAudioTracks(prev => prev.map(t => ({ ...t, active: t.id === id })))
     setSelectedAudioTrackId(id)
-    setAudioTracks(prev => prev.map(t => ({
-      ...t,
-      active: t.id === id
-    })))
+
+    // For live IPTV streams using mpegts.js: switch audio tracks DIRECTLY in the browser.
+    // The browser already has the full multiplexed .ts stream so mpegts.js can handle this
+    // client-side without ANY backend involvement. This bypasses the Render IP ban entirely!
+    if (mpegtsPlayerRef.current) {
+      try {
+        mpegtsPlayerRef.current.currentAudioStream = id
+        console.log(`[mpegts] Switched to audio stream ${id} client-side`)
+      } catch (e) {
+        console.warn('[mpegts] Failed to switch audio stream client-side:', e)
+      }
+      return // Do NOT fall through to backend transcode for live streams
+    }
+
+    // For Video.js (VOD) streams: use backend transcode to switch audio track
+    if (playerRef.current) {
+      handleSelectVideoJsAudio(id)
+    }
   }
 
   useEffect(() => {
