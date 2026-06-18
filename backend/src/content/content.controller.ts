@@ -42,10 +42,50 @@ export class ContentController {
 
   @Get('movies/:id')
   async getMovie(@Request() req: any, @Param('id') id: string) {
-    return this.prisma.movie.findFirst({
+    let movie = await this.prisma.movie.findFirst({
       where: { id, provider: { userId: req.user.userId } },
       include: { category: true, provider: true },
     });
+
+    if (!movie) return null;
+
+    // Dynamically fetch description and rich metadata if it's missing (e.g. initial sync didn't pull it)
+    if (!movie.description && movie.provider) {
+      try {
+        let adapter;
+        const p = movie.provider;
+        if (p.type === 'XTREAM') {
+          const XtreamAdapter = require('../providers/adapters/xtream.adapter').XtreamAdapter;
+          adapter = new XtreamAdapter(p.url, p.username, p.password);
+        } else if (p.type === 'M3U') {
+          // M3U doesn't have an endpoint for extra info usually
+        }
+
+        if (adapter && adapter.getMovieInfo) {
+          const info = await adapter.getMovieInfo(movie.providerStreamId);
+          if (info && Object.keys(info).length > 0) {
+            // Update database with new info
+            movie = await this.prisma.movie.update({
+              where: { id: movie.id },
+              data: {
+                description: info.description || movie.description,
+                backdrop: info.backdrop || movie.backdrop,
+                poster: info.poster || movie.poster,
+                year: info.year || movie.year,
+                duration: info.duration || movie.duration,
+                rating: info.rating || movie.rating,
+              },
+              include: { category: true, provider: true },
+            });
+          }
+        }
+      } catch (err) {
+        // Just log the error, don't fail the request if metadata fetch fails
+        console.error(`Failed to fetch dynamic movie info for ${movie.id}:`, err.message);
+      }
+    }
+
+    return movie;
   }
 
   // ─── SERIES ────────────────────────────────────────────────────────────────

@@ -94,6 +94,20 @@ export class XtreamAdapter implements ProviderAdapter {
     }));
   }
 
+  async getMovieInfo(movieId: string): Promise<Partial<InternalMovie>> {
+    const data = await this.fetchFromApi(`get_vod_info&vod_id=${movieId}`);
+    if (!data || !data.info) return {};
+    const info = data.info;
+    return {
+      description: info.plot || info.description,
+      poster: info.movie_image || info.cover_big,
+      backdrop: info.backdrop_path?.[0] || info.backdrop_path,
+      year: parseInt(info.releasedate, 10) || undefined,
+      duration: parseInt(info.duration_secs, 10) || parseInt(info.duration, 10) || undefined,
+      rating: parseFloat(info.rating) || undefined,
+    };
+  }
+
   async getSeriesCategories(): Promise<InternalSeriesCategory[]> {
     const data = await this.fetchFromApi('get_series_categories');
     const verified = this.verifyArray(data, 'get_series_categories');

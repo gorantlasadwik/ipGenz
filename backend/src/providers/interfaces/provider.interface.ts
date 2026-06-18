@@ -65,6 +65,7 @@ export interface ProviderAdapter {
   
   getMovieCategories(): Promise<InternalMovieCategory[]>;
   getMovies(): Promise<InternalMovie[]>;
+  getMovieInfo?(movieId: string): Promise<Partial<InternalMovie>>;
   
   getSeriesCategories(): Promise<InternalSeriesCategory[]>;
   getSeries(): Promise<InternalSeries[]>;
