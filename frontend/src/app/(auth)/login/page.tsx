@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { api } from "@/lib/api"
+import { ArrowLeft } from "lucide-react"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -51,6 +52,15 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen w-full flex relative items-center justify-center">
+      {/* Back Button */}
+      <Link 
+        href="/" 
+        className="absolute top-8 left-8 z-20 flex items-center gap-2 text-white/60 hover:text-white bg-black/40 hover:bg-black/60 border border-white/10 px-4 py-2.5 rounded-xl transition-all duration-300 backdrop-blur-sm shadow-lg hover:border-white/20 hover:scale-105"
+      >
+        <ArrowLeft size={15} className="text-primary" />
+        <span className="text-[10px] font-bold uppercase tracking-wider font-mono">Back to Home</span>
+      </Link>
+
       {/* Background */}
       <div 
         className="absolute inset-0 bg-cover bg-center z-0"
