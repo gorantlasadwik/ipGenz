@@ -29,7 +29,7 @@ A modern, Netflix-inspired IPTV platform that unifies Live TV, Movies, and Serie
 
 ## 📸 Screenshots
 
-| Cinematic Home Dashboard | Dynamic Global Search |
+| Cinematic Home Dashboard | Landing Page |
 |---|---|
 | <img src="docs/images/dashboard.png" width="100%" /> | <img src="docs/images/landing-v3.png" width="100%" /> |
 | **Movies Library Catalog** | **Movie Details & Metadata** |
