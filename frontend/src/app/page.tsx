@@ -182,7 +182,7 @@ export default function PremiumLandingPage() {
           <div className="w-full max-w-5xl group perspective-1000">
             <div className="transition-transform duration-700 ease-out group-hover:rotate-x-2 group-hover:rotate-y-[-2deg] group-hover:scale-[1.02]">
               <MacWindow>
-                <img src="/images/providers page-v2.png" alt="Provider Dashboard" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                <img src="/images/provider-page-v3.png" alt="Provider Dashboard" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
               </MacWindow>
             </div>
           </div>
@@ -203,7 +203,7 @@ export default function PremiumLandingPage() {
           <div className="w-full max-w-5xl group perspective-1000">
             <div className="transition-transform duration-700 ease-out group-hover:rotate-x-[-2deg] group-hover:rotate-y-2 group-hover:scale-[1.02]">
               <BrowserFrame>
-                <img src="/images/landing-v2.png" alt="Global Search" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                <img src="/images/landing-v3.png" alt="Global Search" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
               </BrowserFrame>
             </div>
           </div>
@@ -225,7 +225,7 @@ export default function PremiumLandingPage() {
             <div className="transition-transform duration-700 ease-out group-hover:rotate-x-2 group-hover:rotate-y-[2deg] group-hover:scale-[1.02]">
               <div className="rounded-[2rem] p-4 bg-[#141414] border border-white/10 shadow-2xl">
                 <div className="rounded-xl overflow-hidden border border-white/5">
-                  <img src="/images/movies-v2.png" alt="Movies Interface" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                  <img src="/images/movies-v3.png" alt="Movies Interface" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
                 </div>
               </div>
             </div>
@@ -247,7 +247,7 @@ export default function PremiumLandingPage() {
           <div className="w-full max-w-5xl group perspective-1000">
             <div className="transition-transform duration-700 ease-out group-hover:rotate-x-[-2deg] group-hover:rotate-y-[-2deg] group-hover:scale-[1.02]">
               <BrowserFrame url="ipgenz.app/series/play">
-                <img src="/images/series-v2.png" alt="Series Interface" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                  <img src="/images/series-v3.png" alt="Series Interface" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
               </BrowserFrame>
             </div>
           </div>
@@ -269,7 +269,7 @@ export default function PremiumLandingPage() {
             <div className="transition-transform duration-700 ease-out group-hover:rotate-x-3 group-hover:scale-[1.03]">
               <div className="rounded-[2.5rem] p-2 bg-gradient-to-b from-zinc-800 to-black border border-white/20 shadow-[0_30px_60px_-15px_rgba(0,0,0,1)]">
                 <div className="rounded-[2rem] overflow-hidden border border-black bg-black">
-                  <img src="/images/live tv-v2.png" alt="Live TV Interface" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                  <img src="/images/live-tv-v3.png" alt="Live TV Interface" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
                 </div>
               </div>
             </div>
@@ -291,7 +291,7 @@ export default function PremiumLandingPage() {
           <div className="w-full max-w-6xl group perspective-1000">
             <div className="transition-transform duration-700 ease-out group-hover:scale-[1.04]">
               <div className="rounded-3xl overflow-hidden border border-white/10 shadow-[0_0_50px_rgba(229,9,20,0.3)]">
-                <img src="/images/movie player example-v2.png" alt="Video Player" className="w-full h-auto object-cover" />
+                <img src="/images/movie-player-v3.png" alt="Video Player" className="w-full h-auto object-cover" />
               </div>
             </div>
           </div>
@@ -312,7 +312,7 @@ export default function PremiumLandingPage() {
           <div className="w-full max-w-4xl group perspective-1000">
             <div className="transition-transform duration-700 ease-out group-hover:rotate-x-2 group-hover:rotate-y-2 group-hover:scale-[1.02]">
               <MacWindow>
-                <img src="/images/playlist syncing progress-v2.png" alt="Admin Dashboard Sync" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                <img src="/images/playlist-sync-v3.png" alt="Admin Dashboard Sync" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
               </MacWindow>
             </div>
           </div>
