@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { Play, Search, Star, Film, ChevronDown, SlidersHorizontal } from "lucide-react"
+import { Play, Search, Star, Film, ChevronDown, SlidersHorizontal, Plus } from "lucide-react"
 import Link from "next/link"
 import { api } from "@/lib/api"
 
@@ -35,9 +35,15 @@ export default function MoviesPage() {
   const gridContainerRef = useRef<HTMLDivElement>(null)
   const isFirstLoadRef = useRef(true)
 
+  const [providers, setProviders] = useState<any[]>([])
+
   // Fetch categories on mount
   useEffect(() => {
-    api.getMovieCategories().then(cats => {
+    Promise.all([
+      api.getProviders().catch(() => []),
+      api.getMovieCategories().catch(() => [])
+    ]).then(([provs, cats]) => {
+      setProviders(provs)
       setCategories(cats)
       // Restore selected category on mount
       if (typeof window !== 'undefined') {
@@ -142,6 +148,28 @@ export default function MoviesPage() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (!loading && providers.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-black text-white min-h-[60vh] p-8 w-full">
+        <div className="max-w-md text-center space-y-6">
+          <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/10">
+            <SlidersHorizontal className="w-10 h-10 text-zinc-400" />
+          </div>
+          <h2 className="text-3xl font-black tracking-tight">No Providers Connected</h2>
+          <p className="text-zinc-400 text-sm font-medium">
+            To view movies, please connect and synchronize an IPTV provider first.
+          </p>
+          <Link 
+            href="/providers" 
+            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white font-bold px-8 py-3 rounded-full transition shadow-lg shadow-primary/20 cursor-pointer"
+          >
+            <Plus size={18} /> Connect Provider
+          </Link>
+        </div>
       </div>
     )
   }

@@ -6,6 +6,8 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService implements OnModuleInit {
+  public static trialMasterUserId: string | null = null;
+
   constructor(private prisma: PrismaService) {}
 
   async onModuleInit() {
@@ -36,6 +38,36 @@ export class UsersService implements OnModuleInit {
         }
       });
       console.log('Seeded demo profile for demo user.');
+    }
+
+    // Seed Trial Master User
+    const trialMasterEmail = 'trial_master@ipgenz.com';
+    let trialMasterUser = await this.findOne(trialMasterEmail);
+    if (!trialMasterUser) {
+      const salt = await bcrypt.genSalt();
+      const passwordHash = await bcrypt.hash('TrialMasterAppSecret123!', salt);
+      trialMasterUser = await this.prisma.user.create({
+        data: {
+          email: trialMasterEmail,
+          passwordHash,
+        }
+      });
+      console.log('Seeded trial master user: trial_master@ipgenz.com');
+    }
+    UsersService.trialMasterUserId = trialMasterUser.id;
+
+    // Ensure Trial Master user has a profile
+    const trialMasterProfile = await this.prisma.profile.findFirst({
+      where: { userId: trialMasterUser.id }
+    });
+    if (!trialMasterProfile) {
+      await this.prisma.profile.create({
+        data: {
+          userId: trialMasterUser.id,
+          name: 'Trial Master',
+        }
+      });
+      console.log('Seeded trial master profile for trial master user.');
     }
   }
 

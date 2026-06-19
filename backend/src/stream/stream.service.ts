@@ -511,9 +511,9 @@ export class StreamService {
     }
   }
 
-  async proxyDownloadMovie(movieId: string, userId: string, res: Response) {
+  async proxyDownloadMovie(movieId: string, userId: string, targetUserId: string, res: Response) {
     const movie = await this.prisma.movie.findFirst({
-      where: { id: movieId, provider: { userId } },
+      where: { id: movieId, provider: { userId: targetUserId } },
     });
     if (!movie) throw new NotFoundException('Movie not found');
     
@@ -543,9 +543,9 @@ export class StreamService {
     }
   }
 
-  async proxyDownloadEpisode(episodeId: string, userId: string, res: Response) {
+  async proxyDownloadEpisode(episodeId: string, userId: string, targetUserId: string, res: Response) {
     const episode = await this.prisma.episode.findFirst({
-      where: { id: episodeId, season: { series: { provider: { userId } } } },
+      where: { id: episodeId, season: { series: { provider: { userId: targetUserId } } } },
       include: { season: { include: { series: true } } }
     });
     if (!episode) throw new NotFoundException('Episode not found');

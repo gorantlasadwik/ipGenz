@@ -3,8 +3,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { XtreamAdapter } from '../providers/adapters/xtream.adapter';
 import { M3UAdapter } from '../providers/adapters/m3u.adapter';
-import { decryptString } from '../utils/crypto.util';
+import { encryptString, decryptString } from '../utils/crypto.util';
 import { ContentService } from './content.service';
+import { UsersService } from '../users/users.service';
 
 @Controller('content')
 @UseGuards(JwtAuthGuard)
@@ -13,6 +14,13 @@ export class ContentController {
     private prisma: PrismaService,
     private contentService: ContentService
   ) {}
+
+  private getTargetUserId(req: any): string {
+    if (req.user?.isPremiumTrial) {
+      return UsersService.trialMasterUserId || req.user.userId;
+    }
+    return req.user?.userId;
+  }
 
   @Get('recommendations')
   async getRecommendations(@Request() req: any, @Query('profileId') profileId: string) {
@@ -33,7 +41,7 @@ export class ContentController {
     const take = parseInt(limit || '50');
     return this.prisma.movie.findMany({
       where: {
-        provider: { userId: req.user.userId },
+        provider: { userId: this.getTargetUserId(req) },
         ...(categoryId ? { movieCategoryId: categoryId } : {}),
         ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
       },
@@ -47,7 +55,7 @@ export class ContentController {
   async getMovieCategories(@Request() req: any, @Query('providerId') providerId?: string) {
     return this.prisma.movieCategory.findMany({
       where: {
-        provider: { userId: req.user.userId },
+        provider: { userId: this.getTargetUserId(req) },
         ...(providerId ? { providerId } : {}),
       },
       include: {
@@ -59,7 +67,7 @@ export class ContentController {
   @Get('movies/:id')
   async getMovie(@Request() req: any, @Param('id') id: string) {
     let movie = await this.prisma.movie.findFirst({
-      where: { id, provider: { userId: req.user.userId } },
+      where: { id, provider: { userId: this.getTargetUserId(req) } },
       include: { category: true, provider: true },
     });
 
@@ -115,7 +123,7 @@ export class ContentController {
     const take = parseInt(limit || '50');
     return this.prisma.series.findMany({
       where: {
-        provider: { userId: req.user.userId },
+        provider: { userId: this.getTargetUserId(req) },
         ...(categoryId ? { seriesCategoryId: categoryId } : {}),
         ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
       },
@@ -129,7 +137,7 @@ export class ContentController {
   async getSeriesCategories(@Request() req: any, @Query('providerId') providerId?: string) {
     return this.prisma.seriesCategory.findMany({
       where: {
-        provider: { userId: req.user.userId },
+        provider: { userId: this.getTargetUserId(req) },
         ...(providerId ? { providerId } : {}),
       },
       include: {
@@ -141,7 +149,7 @@ export class ContentController {
   @Get('series/:id')
   async getSeriesById(@Request() req: any, @Param('id') id: string) {
     const series = await this.prisma.series.findFirst({
-      where: { id, provider: { userId: req.user.userId } },
+      where: { id, provider: { userId: this.getTargetUserId(req) } },
       include: {
         category: true,
         provider: true,
@@ -259,7 +267,7 @@ export class ContentController {
     const take = parseInt(limit || '100');
     return this.prisma.liveChannel.findMany({
       where: {
-        provider: { userId: req.user.userId },
+        provider: { userId: this.getTargetUserId(req) },
         ...(categoryId ? { liveCategoryId: categoryId } : {}),
         ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
       },
@@ -273,7 +281,7 @@ export class ContentController {
   async getLiveCategories(@Request() req: any, @Query('providerId') providerId?: string) {
     return this.prisma.liveCategory.findMany({
       where: {
-        provider: { userId: req.user.userId },
+        provider: { userId: this.getTargetUserId(req) },
         ...(providerId ? { providerId } : {}),
       },
       include: {
@@ -285,7 +293,7 @@ export class ContentController {
   @Get('live/channels/:id')
   async getLiveChannel(@Request() req: any, @Param('id') id: string) {
     return this.prisma.liveChannel.findFirst({
-      where: { id, provider: { userId: req.user.userId } },
+      where: { id, provider: { userId: this.getTargetUserId(req) } },
       include: { category: true, provider: true },
     });
   }
@@ -298,19 +306,20 @@ export class ContentController {
       return { movies: [], series: [], channels: [] };
     }
 
+    const userId = this.getTargetUserId(req);
     const [movies, series, channels] = await Promise.all([
       this.prisma.movie.findMany({
-        where: { name: { contains: query, mode: 'insensitive' }, provider: { userId: req.user.userId } },
+        where: { name: { contains: query, mode: 'insensitive' }, provider: { userId } },
         take: 20,
         include: { category: true },
       }),
       this.prisma.series.findMany({
-        where: { name: { contains: query, mode: 'insensitive' }, provider: { userId: req.user.userId } },
+        where: { name: { contains: query, mode: 'insensitive' }, provider: { userId } },
         take: 20,
         include: { category: true },
       }),
       this.prisma.liveChannel.findMany({
-        where: { name: { contains: query, mode: 'insensitive' }, provider: { userId: req.user.userId } },
+        where: { name: { contains: query, mode: 'insensitive' }, provider: { userId } },
         take: 20,
         include: { category: true },
       }),

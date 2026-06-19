@@ -7,6 +7,7 @@ import * as bcrypt from 'bcrypt';
 import * as os from 'os';
 import { ProviderType } from '@prisma/client';
 import { encryptString, decryptString } from '../utils/crypto.util';
+import { UsersService } from '../users/users.service';
 
 @Controller('sadwik')
 export class SadwikController {
@@ -583,6 +584,19 @@ export class SadwikController {
     const provider = await (this.prisma as any).trialProvider.findFirst();
     if (!provider) return null;
 
+    const trialMasterUser = await this.prisma.user.findUnique({ where: { email: 'trial_master@ipgenz.com' } });
+    let shadowProviderId = null;
+    let shadowStatus = 'ACTIVE';
+    if (trialMasterUser) {
+      const shadow = await this.prisma.provider.findFirst({
+        where: { userId: trialMasterUser.id }
+      });
+      if (shadow) {
+        shadowProviderId = shadow.id;
+        shadowStatus = shadow.status;
+      }
+    }
+
     return {
       id: provider.id,
       providerName: provider.providerName,
@@ -591,6 +605,8 @@ export class SadwikController {
       username: provider.username,
       password: provider.encryptedPassword ? decryptString(provider.encryptedPassword) : '',
       playlistUrl: provider.playlistUrl,
+      shadowProviderId,
+      shadowStatus,
     };
   }
 
@@ -619,12 +635,54 @@ export class SadwikController {
       });
     }
 
+    // Upsert shadow provider for trial_master@ipgenz.com
+    const trialMasterUser = await this.prisma.user.findUnique({ where: { email: 'trial_master@ipgenz.com' } });
+    if (trialMasterUser) {
+      const existingShadow = await this.prisma.provider.findFirst({
+        where: { userId: trialMasterUser.id }
+      });
+
+      const shadowData = {
+        userId: trialMasterUser.id,
+        providerName: result.providerName,
+        providerType: result.providerType,
+        serverUrl: result.serverUrl,
+        username: result.username,
+        encryptedPassword: result.encryptedPassword,
+        playlistUrl: result.playlistUrl,
+        status: 'ACTIVE' as any,
+      };
+
+      if (existingShadow) {
+        await this.prisma.provider.update({
+          where: { id: existingShadow.id },
+          data: shadowData,
+        });
+      } else {
+        await this.prisma.provider.create({
+          data: shadowData,
+        });
+      }
+    }
+
     await this.prisma.auditLog.create({
       data: {
         action: 'UPDATE_PREMIUM_TRIAL_PROVIDER',
         target: result.id,
       },
     });
+
+    let shadowProviderId = null;
+    let shadowStatus = 'ACTIVE';
+    if (trialMasterUser) {
+      const shadow = await this.prisma.provider.findFirst({
+        where: { userId: trialMasterUser.id }
+      });
+      if (shadow) {
+        shadowProviderId = shadow.id;
+        shadowStatus = shadow.status;
+      }
+    }
 
     return {
       id: result.id,
@@ -633,6 +691,8 @@ export class SadwikController {
       serverUrl: result.serverUrl,
       username: result.username,
       playlistUrl: result.playlistUrl,
+      shadowProviderId,
+      shadowStatus,
     };
   }
 }

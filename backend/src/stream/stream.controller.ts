@@ -2,6 +2,7 @@ import { Controller, Get, Param, Query, Res, UseGuards, Request } from '@nestjs/
 import { StreamService } from './stream.service';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UsersService } from '../users/users.service';
 
 @Controller('stream')
 @UseGuards(JwtAuthGuard)
@@ -16,14 +17,15 @@ export class StreamController {
     @Query('audioTrack') audioTrack?: string,
   ) {
     const trackNum = audioTrack !== undefined && audioTrack !== '' ? parseInt(audioTrack, 10) : undefined;
-    return this.streamService.proxyLiveStream(channelId, trackNum, req.user.userId, res);
+    const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
+    return this.streamService.proxyLiveStream(channelId, trackNum, targetUserId, res);
   }
 
   @Get('live/:channelId/info')
   async getLiveChannelInfo(@Request() req: any, @Param('channelId') channelId: string) {
-    return this.streamService.getLiveStreamInfo(channelId, req.user.userId);
+    const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
+    return this.streamService.getLiveStreamInfo(channelId, targetUserId);
   }
-
 
   @Get('movie/:movieId')
   async streamMovie(
@@ -35,12 +37,14 @@ export class StreamController {
   ) {
     const trackNum = audioTrack !== undefined && audioTrack !== '' ? parseInt(audioTrack, 10) : undefined;
     const startNum = start !== undefined && start !== '' ? parseFloat(start) : undefined;
-    return this.streamService.proxyMovieStream(req, movieId, req.user.userId, res, trackNum, startNum);
+    const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
+    return this.streamService.proxyMovieStream(req, movieId, targetUserId, res, trackNum, startNum);
   }
 
   @Get('movie/:movieId/info')
   async getMovieStreamInfo(@Request() req: any, @Param('movieId') movieId: string) {
-    return this.streamService.getMovieStreamInfo(movieId, req.user.userId);
+    const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
+    return this.streamService.getMovieStreamInfo(movieId, targetUserId);
   }
 
   @Get('episode/:episodeId')
@@ -53,12 +57,14 @@ export class StreamController {
   ) {
     const trackNum = audioTrack !== undefined && audioTrack !== '' ? parseInt(audioTrack, 10) : undefined;
     const startNum = start !== undefined && start !== '' ? parseFloat(start) : undefined;
-    return this.streamService.proxyEpisodeStream(req, episodeId, req.user.userId, res, trackNum, startNum);
+    const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
+    return this.streamService.proxyEpisodeStream(req, episodeId, targetUserId, res, trackNum, startNum);
   }
 
   @Get('episode/:episodeId/info')
   async getEpisodeStreamInfo(@Request() req: any, @Param('episodeId') episodeId: string) {
-    return this.streamService.getEpisodeStreamInfo(episodeId, req.user.userId);
+    const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
+    return this.streamService.getEpisodeStreamInfo(episodeId, targetUserId);
   }
 
   @Get('download/movie/:movieId')
@@ -67,7 +73,8 @@ export class StreamController {
     @Param('movieId') movieId: string,
     @Res() res: Response,
   ) {
-    return this.streamService.proxyDownloadMovie(movieId, req.user.userId, res);
+    const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
+    return this.streamService.proxyDownloadMovie(movieId, req.user.userId, targetUserId, res);
   }
 
   @Get('download/episode/:episodeId')
@@ -76,6 +83,7 @@ export class StreamController {
     @Param('episodeId') episodeId: string,
     @Res() res: Response,
   ) {
-    return this.streamService.proxyDownloadEpisode(episodeId, req.user.userId, res);
+    const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
+    return this.streamService.proxyDownloadEpisode(episodeId, req.user.userId, targetUserId, res);
   }
 }

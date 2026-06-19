@@ -1,11 +1,34 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class ContentService {
   constructor(private prisma: PrismaService) {}
 
   async getRecommendations(profileId: string) {
+    const profile = await this.prisma.profile.findUnique({
+      where: { id: profileId },
+      select: { userId: true, user: { select: { isPremiumTrial: true } } },
+    });
+    if (!profile) {
+      return { recommendedMovies: [], recommendedSeries: [] };
+    }
+    const userId = (profile.user?.isPremiumTrial && UsersService.trialMasterUserId)
+      ? UsersService.trialMasterUserId
+      : profile.userId;
+
+    // Check if this user actually has synced movies or series
+    const hasMovies = await this.prisma.movie.findFirst({
+      where: { provider: { userId } },
+    });
+    const hasSeries = await this.prisma.series.findFirst({
+      where: { provider: { userId } },
+    });
+    if (!hasMovies && !hasSeries) {
+      return { recommendedMovies: [], recommendedSeries: [] };
+    }
+
     // 1. Get user's history and favorites
     const history = await this.prisma.watchHistory.findMany({
       where: { profileId },
@@ -62,6 +85,7 @@ export class ContentService {
     if (topMovieCategories.length > 0) {
       recommendedMovies = await this.prisma.movie.findMany({
         where: {
+          provider: { userId },
           movieCategoryId: { in: topMovieCategories },
           id: { notIn: watchedMovieIds }, // Don't recommend already watched
           poster: { not: null }
@@ -72,7 +96,7 @@ export class ContentService {
     } else {
       // Fallback: newest movies with posters
       recommendedMovies = await this.prisma.movie.findMany({
-        where: { poster: { not: null }, id: { notIn: watchedMovieIds } },
+        where: { provider: { userId }, poster: { not: null }, id: { notIn: watchedMovieIds } },
         take: 20,
         orderBy: { createdAt: 'desc' },
       });
@@ -81,6 +105,7 @@ export class ContentService {
     if (topSeriesCategories.length > 0) {
       recommendedSeries = await this.prisma.series.findMany({
         where: {
+          provider: { userId },
           seriesCategoryId: { in: topSeriesCategories },
           id: { notIn: watchedSeriesIds },
           poster: { not: null }
@@ -91,7 +116,7 @@ export class ContentService {
     } else {
       // Fallback: newest series with posters
       recommendedSeries = await this.prisma.series.findMany({
-        where: { poster: { not: null }, id: { notIn: watchedSeriesIds } },
+        where: { provider: { userId }, poster: { not: null }, id: { notIn: watchedSeriesIds } },
         take: 20,
         orderBy: { createdAt: 'desc' },
       });
