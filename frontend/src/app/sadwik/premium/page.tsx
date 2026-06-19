@@ -23,13 +23,14 @@ export default function PremiumAdminPage() {
   // Shadow Syncing State
   const [shadowProviderId, setShadowProviderId] = useState<string | null>(null)
   const [shadowStatus, setShadowStatus] = useState<string>("ACTIVE")
+  const [shadowCount, setShadowCount] = useState<any>(null)
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncProgress, setSyncProgress] = useState<any>(null)
-
+ 
   useEffect(() => {
     fetchData()
   }, [])
-
+ 
   useEffect(() => {
     let interval: NodeJS.Timeout
     if (isSyncing && shadowProviderId) {
@@ -43,6 +44,7 @@ export default function PremiumAdminPage() {
             const providerConfig = await api.getTrialProvider()
             if (providerConfig) {
               setShadowStatus(providerConfig.shadowStatus || "ACTIVE")
+              setShadowCount(providerConfig._count || null)
             }
           }
         } catch (e) {
@@ -52,7 +54,7 @@ export default function PremiumAdminPage() {
     }
     return () => clearInterval(interval)
   }, [isSyncing, shadowProviderId])
-
+ 
   const fetchData = async () => {
     try {
       const [trialsData, providerConfig] = await Promise.all([
@@ -69,6 +71,7 @@ export default function PremiumAdminPage() {
         setPlaylistUrl(providerConfig.playlistUrl || "")
         setShadowProviderId(providerConfig.shadowProviderId || null)
         setShadowStatus(providerConfig.shadowStatus || "ACTIVE")
+        setShadowCount(providerConfig._count || null)
         if (providerConfig.shadowStatus === "SYNCING") {
           setIsSyncing(true)
         }
@@ -79,12 +82,12 @@ export default function PremiumAdminPage() {
       setLoading(false)
     }
   }
-
+ 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault()
     setSavingConfig(true)
     setSaveStatus(null)
-
+ 
     try {
       const response = await api.saveTrialProvider({
         providerName,
@@ -96,6 +99,7 @@ export default function PremiumAdminPage() {
       })
       setShadowProviderId(response.shadowProviderId || null)
       setShadowStatus(response.shadowStatus || "ACTIVE")
+      setShadowCount(response._count || null)
       if (response.shadowStatus === "SYNCING") {
         setIsSyncing(true)
       }
@@ -305,6 +309,15 @@ export default function PremiumAdminPage() {
                         {shadowStatus}
                       </span>
                     </div>
+                    {shadowCount && (
+                      <div className="text-xs text-zinc-400 mt-2 bg-white/5 px-3 py-2 rounded-lg border border-white/10 inline-flex items-center gap-3">
+                        <span><strong className="text-white">{shadowCount.liveChannels || 0}</strong> Channels</span>
+                        <span className="text-zinc-600">•</span>
+                        <span><strong className="text-white">{shadowCount.movies || 0}</strong> Movies</span>
+                        <span className="text-zinc-600">•</span>
+                        <span><strong className="text-white">{shadowCount.series || 0}</strong> Series</span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     {isSyncing ? (

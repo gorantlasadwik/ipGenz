@@ -542,6 +542,16 @@ export class SadwikController {
         playlistUrl: true,
         status: true,
         lastSyncAt: true,
+        _count: {
+          select: {
+            liveChannels: true,
+            movies: true,
+            series: true,
+            liveCategories: true,
+            movieCategories: true,
+            seriesCategories: true,
+          },
+        },
       }
     });
   }
@@ -566,6 +576,26 @@ export class SadwikController {
         encryptedPassword: body.password ? encryptString(body.password.trim()) : undefined,
         playlistUrl: body.playlistUrl?.trim(),
         status: 'ACTIVE',
+      },
+      select: {
+        id: true,
+        providerName: true,
+        providerType: true,
+        serverUrl: true,
+        username: true,
+        playlistUrl: true,
+        status: true,
+        lastSyncAt: true,
+        _count: {
+          select: {
+            liveChannels: true,
+            movies: true,
+            series: true,
+            liveCategories: true,
+            movieCategories: true,
+            seriesCategories: true,
+          },
+        },
       }
     });
 
@@ -587,13 +617,29 @@ export class SadwikController {
     const trialMasterUser = await this.prisma.user.findUnique({ where: { email: 'trial_master@ipgenz.com' } });
     let shadowProviderId = null;
     let shadowStatus = 'ACTIVE';
+    let count = null;
     if (trialMasterUser) {
       const shadow = await this.prisma.provider.findFirst({
-        where: { userId: trialMasterUser.id }
+        where: { userId: trialMasterUser.id },
+        select: {
+          id: true,
+          status: true,
+          _count: {
+            select: {
+              liveChannels: true,
+              movies: true,
+              series: true,
+              liveCategories: true,
+              movieCategories: true,
+              seriesCategories: true,
+            },
+          },
+        }
       });
       if (shadow) {
         shadowProviderId = shadow.id;
         shadowStatus = shadow.status;
+        count = shadow._count;
       }
     }
 
@@ -607,6 +653,7 @@ export class SadwikController {
       playlistUrl: provider.playlistUrl,
       shadowProviderId,
       shadowStatus,
+      _count: count,
     };
   }
 
@@ -674,13 +721,29 @@ export class SadwikController {
 
     let shadowProviderId = null;
     let shadowStatus = 'ACTIVE';
+    let count = null;
     if (trialMasterUser) {
       const shadow = await this.prisma.provider.findFirst({
-        where: { userId: trialMasterUser.id }
+        where: { userId: trialMasterUser.id },
+        select: {
+          id: true,
+          status: true,
+          _count: {
+            select: {
+              liveChannels: true,
+              movies: true,
+              series: true,
+              liveCategories: true,
+              movieCategories: true,
+              seriesCategories: true,
+            },
+          },
+        }
       });
       if (shadow) {
         shadowProviderId = shadow.id;
         shadowStatus = shadow.status;
+        count = shadow._count;
       }
     }
 
@@ -693,6 +756,7 @@ export class SadwikController {
       playlistUrl: result.playlistUrl,
       shadowProviderId,
       shadowStatus,
+      _count: count,
     };
   }
 }

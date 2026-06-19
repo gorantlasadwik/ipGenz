@@ -121,6 +121,15 @@ export default function DemoAdminPage() {
                   {provider.status}
                 </span>
               </div>
+              {provider._count && (
+                <div className="text-xs text-zinc-400 mt-3 bg-white/5 px-3 py-2 rounded-lg border border-white/10 inline-flex items-center gap-3">
+                  <span><strong className="text-white">{provider._count.liveChannels || 0}</strong> Channels</span>
+                  <span className="text-zinc-600">•</span>
+                  <span><strong className="text-white">{provider._count.movies || 0}</strong> Movies</span>
+                  <span className="text-zinc-600">•</span>
+                  <span><strong className="text-white">{provider._count.series || 0}</strong> Series</span>
+                </div>
+              )}
             </div>
             <button 
               onClick={triggerGlobalSync} 
@@ -132,17 +141,20 @@ export default function DemoAdminPage() {
           </div>
           
           {isSyncing && syncProgress && (
-            <div className="mt-4 p-4 bg-black/50 rounded-lg border border-white/10">
-              <div className="flex justify-between text-sm mb-2 text-zinc-400">
-                <span>Sync Progress ({syncProgress.totalProcessed} / {syncProgress.totalItems || '?'})</span>
-                <span>{syncProgress.currentStage}</span>
+            <div className="mt-4 p-4 bg-black/50 rounded-lg border border-white/10 space-y-3">
+              <div className="flex justify-between text-xs font-semibold mb-2 text-zinc-400">
+                <span>{syncProgress.step}</span>
+                <span>{syncProgress.processedItems} / {syncProgress.totalItems || '?'}</span>
               </div>
-              <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden">
+              <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden mb-2">
                 <div 
                   className="bg-red-500 h-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, ((syncProgress.totalProcessed || 0) / (syncProgress.totalItems || 1)) * 100)}%` }}
+                  style={{ width: `${Math.min(100, ((syncProgress.processedItems || 0) / (syncProgress.totalItems || 1)) * 100)}%` }}
                 />
               </div>
+              {syncProgress.message && (
+                <p className="text-zinc-500 text-[11px] italic">{syncProgress.message}</p>
+              )}
             </div>
           )}
         </div>
