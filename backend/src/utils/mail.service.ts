@@ -5,12 +5,17 @@ import axios from 'axios';
 export class MailService {
   private readonly logger = new Logger(MailService.name);
 
+  private cleanEmail(email: string): string {
+    return email.split('_trial_')[0].split('_premium_')[0];
+  }
+
   async sendTrialCredentials(toEmail: string, trialUsername: string, trialPassword: string) {
+    const cleanToEmail = this.cleanEmail(toEmail);
     const apiKey = process.env.BREVO_API_KEY;
 
     if (!apiKey) {
       this.logger.warn(
-        `BREVO_API_KEY not configured. Skipping email to ${toEmail}. ` +
+        `BREVO_API_KEY not configured. Skipping email to ${cleanToEmail}. ` +
         `Credentials: ${trialUsername} / ${trialPassword}`,
       );
       return;
@@ -130,7 +135,7 @@ These credentials are tied to the first device that logs in — keep them privat
         'https://api.brevo.com/v3/smtp/email',
         {
           sender: { name: senderName, email: senderEmail },
-          to: [{ email: toEmail }],
+          to: [{ email: cleanToEmail }],
           subject: 'Your IPGENZ access credentials',
           textContent,
           htmlContent,
@@ -144,10 +149,10 @@ These credentials are tied to the first device that logs in — keep them privat
         },
       );
 
-      this.logger.log(`Sent trial credentials email to ${toEmail}`);
+      this.logger.log(`Sent trial credentials email to ${cleanToEmail}`);
     } catch (error: any) {
       const msg = error.response?.data?.message || error.message || 'Unknown error';
-      this.logger.error(`Failed to send email to ${toEmail}: ${msg}`);
+      this.logger.error(`Failed to send email to ${cleanToEmail}: ${msg}`);
       throw new InternalServerErrorException(`Email delivery failed: ${msg}`);
     }
   }
@@ -205,9 +210,10 @@ These credentials are tied to the first device that logs in — keep them privat
     loginUsername: string,
     loginPassword: string,
   ) {
+    const cleanToEmail = this.cleanEmail(toEmail);
     const apiKey = process.env.BREVO_API_KEY;
     if (!apiKey) {
-      this.logger.warn(`BREVO_API_KEY not configured. Skipping payment approval receipt to ${toEmail}.`);
+      this.logger.warn(`BREVO_API_KEY not configured. Skipping payment approval receipt to ${cleanToEmail}.`);
       return;
     }
 
@@ -360,7 +366,7 @@ Thank you for choosing IPGENZ!
         'https://api.brevo.com/v3/smtp/email',
         {
           sender: { name: senderName, email: senderEmail },
-          to: [{ email: toEmail }],
+          to: [{ email: cleanToEmail }],
           subject: `✨ Your IPGENZ Access is Ready — Invoice #INV-${transactionId.slice(0, 8).toUpperCase()}`,
           textContent,
           htmlContent,
@@ -373,9 +379,9 @@ Thank you for choosing IPGENZ!
           },
         },
       );
-      this.logger.log(`Sent payment approval and billing email to ${toEmail}`);
+      this.logger.log(`Sent payment approval and billing email to ${cleanToEmail}`);
     } catch (e: any) {
-      this.logger.error(`Failed to send payment approval email to ${toEmail}:`, e.response?.data?.message || e.message);
+      this.logger.error(`Failed to send payment approval email to ${cleanToEmail}:`, e.response?.data?.message || e.message);
     }
   }
 }

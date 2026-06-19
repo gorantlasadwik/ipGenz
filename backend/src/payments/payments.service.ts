@@ -66,45 +66,25 @@ export class PaymentsService {
       trialExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
     }
 
-    // Check if user already exists
-    let user = await this.prisma.user.findUnique({
-      where: { email: request.userEmail },
+    // Always create a new user for premium access to ensure unique accounts
+    const user = await this.prisma.user.create({
+      data: {
+        email: `${request.userEmail}_premium_${trialUsername}`,
+        isPremiumTrial: true,
+        trialRequested: true,
+        trialUsername,
+        trialPassword,
+        trialExpiry,
+      },
     });
 
-    if (user) {
-      // Update existing user with premium active status and numeric login credentials
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          isPremiumTrial: true,
-          trialRequested: true,
-          trialUsername,
-          trialPassword,
-          trialExpiry,
-          assignedIp: null, // Allow login from new IP
-        },
-      });
-    } else {
-      // Create new user with premium active status and numeric login credentials
-      user = await this.prisma.user.create({
-        data: {
-          email: request.userEmail,
-          isPremiumTrial: true,
-          trialRequested: true,
-          trialUsername,
-          trialPassword,
-          trialExpiry,
-        },
-      });
-
-      // Create a default Profile
-      await this.prisma.profile.create({
-        data: {
-          userId: user.id,
-          name: request.userName || 'Member',
-        },
-      });
-    }
+    // Create a default Profile
+    await this.prisma.profile.create({
+      data: {
+        userId: user.id,
+        name: request.userName || 'Member',
+      },
+    });
 
     // Setup active IPTV provider for the user
     if (masterProvider) {

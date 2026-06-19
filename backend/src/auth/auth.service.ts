@@ -103,8 +103,17 @@ export class AuthService {
 
   async requestTrial(email: string) {
     // 1. Check if user already has an active trial or requested
-    let existingUser = await this.usersService.findOne(email);
-    if (existingUser && (existingUser.trialRequested || existingUser.isPremiumTrial)) {
+    const existingTrialUser = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: email },
+          { email: { startsWith: `${email}_trial_` } },
+          { email: { startsWith: `${email}_premium_` } }
+        ]
+      }
+    });
+
+    if (existingTrialUser && (existingTrialUser.trialRequested || existingTrialUser.isPremiumTrial)) {
       throw new ConflictException('Trial already requested or active for this email');
     }
 
@@ -124,36 +133,18 @@ export class AuthService {
     await this.mailService.sendTrialCredentials(email, trialUsername, trialPassword);
 
     // 5. Email sent successfully — now create DB records
-    let userId: string;
-
-    if (existingUser) {
-      // Update existing user to active trial
-      const updated = await this.prisma.user.update({
-        where: { id: existingUser.id },
-        data: {
-          isPremiumTrial: true,
-          trialRequested: true,
-          trialUsername,
-          trialPassword,
-          trialExpiry,
-          assignedIp: null
-        }
-      });
-      userId = updated.id;
-    } else {
-      // Create new user
-      const created = await this.prisma.user.create({
-        data: {
-          email,
-          isPremiumTrial: true,
-          trialRequested: true,
-          trialUsername,
-          trialPassword,
-          trialExpiry,
-        }
-      });
-      userId = created.id;
-    }
+    //    Always create a new user for trials to guarantee data isolation
+    const created = await this.prisma.user.create({
+      data: {
+        email: `${email}_trial_${trialUsername}`,
+        isPremiumTrial: true,
+        trialRequested: true,
+        trialUsername,
+        trialPassword,
+        trialExpiry,
+      }
+    });
+    const userId = created.id;
 
     // 6. Create default profile for the trial user
     await this.prisma.profile.create({
