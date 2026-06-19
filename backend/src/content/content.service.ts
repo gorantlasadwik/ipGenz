@@ -7,7 +7,7 @@ export class ContentService {
   constructor(private prisma: PrismaService) {}
 
   async getRecommendations(profileId: string) {
-    const profile = await this.prisma.profile.findUnique({
+    const profile: any = await (this.prisma.profile.findUnique as any)({
       where: { id: profileId },
       select: { userId: true, user: { select: { isPremiumTrial: true } } },
     });
