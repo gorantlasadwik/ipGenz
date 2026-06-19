@@ -14,7 +14,7 @@ export default function MainLayout({
   return (
     <div className="flex h-screen bg-black text-white overflow-hidden font-sans">
       <TopNav />
-      <main className={`flex-1 w-full h-full relative ${!isHome ? 'pt-24' : ''}`}>
+      <main className={`flex-1 w-full h-full overflow-y-auto relative ${!isHome ? 'pt-24' : ''}`}>
         {children}
       </main>
     </div>
