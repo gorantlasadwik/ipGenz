@@ -25,6 +25,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (!payload.sessionToken || payload.sessionToken !== user.currentStreamSession) {
         throw new UnauthorizedException('Session expired: logged in on another device');
       }
+      if (user.trialExpiry && new Date() > user.trialExpiry) {
+        throw new UnauthorizedException('Subscription expired');
+      }
     }
     // Return standard user payload
     return { userId: payload.sub, email: payload.email, isPremiumTrial: user.isPremiumTrial };

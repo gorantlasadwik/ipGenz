@@ -8,11 +8,15 @@ const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Resp
   
   if (res.status === 401 && !isAuthRoute) {
     if (typeof window !== 'undefined' && localStorage.getItem('token')) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('profileId');
-      localStorage.removeItem('isDemo');
-      localStorage.removeItem('isPremiumTrial');
-      window.location.href = '/login';
+      const isSubscriptionPage = window.location.pathname === '/subscription';
+      if (!isSubscriptionPage) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('profileId');
+        localStorage.removeItem('isDemo');
+        localStorage.removeItem('isPremiumTrial');
+        localStorage.removeItem('trialExpiry');
+        window.location.href = '/login';
+      }
     }
     throw new Error('Unauthorized');
   }

@@ -32,6 +32,16 @@ export default function ProfilesPage() {
 
   useEffect(() => {
     setIsDemo(isDemoUser())
+
+    const isPremiumTrial = localStorage.getItem("isPremiumTrial") === "true";
+    if (isPremiumTrial) {
+      const expiryStr = localStorage.getItem("trialExpiry");
+      if (expiryStr && new Date().getTime() > new Date(expiryStr).getTime()) {
+        router.push('/subscription');
+        return;
+      }
+    }
+
     api.getProfiles().then((data) => {
       setProfiles(data)
       setLoading(false)

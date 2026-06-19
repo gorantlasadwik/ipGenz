@@ -31,8 +31,17 @@ export default function LoginPage() {
 
       if (data.user?.isPremiumTrial) {
         localStorage.setItem("isPremiumTrial", "true")
+        localStorage.setItem("trialExpiry", data.user?.trialExpiry || "")
+        
+        // Check if already expired
+        const expiryTime = data.user?.trialExpiry ? new Date(data.user.trialExpiry).getTime() : 0;
+        if (expiryTime && Date.now() > expiryTime) {
+          router.push("/subscription")
+          return
+        }
       } else {
         localStorage.setItem("isPremiumTrial", "false")
+        localStorage.removeItem("trialExpiry")
       }
       
       router.push("/profiles")

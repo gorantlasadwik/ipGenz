@@ -20,11 +20,6 @@ export class AuthService {
     if (email.length === 15 && /^\d+$/.test(email)) {
       const trialUser = await this.usersService.findByTrialUsername(email);
       if (trialUser && trialUser.trialPassword === pass) {
-        // Check Expiry
-        if (trialUser.trialExpiry && new Date() > trialUser.trialExpiry) {
-          throw new UnauthorizedException('Trial has expired. Please purchase a subscription to continue.');
-        }
-
         // Strict 1 IP enforcement
         if (trialUser.assignedIp) {
           if (ipAddress && trialUser.assignedIp !== ipAddress) {
@@ -82,7 +77,8 @@ export class AuthService {
         id: user.id,
         email: user.email,
         isDemo: user.email === 'demo@ipgenz.com',
-        isPremiumTrial: user.isPremiumTrial || false
+        isPremiumTrial: user.isPremiumTrial || false,
+        trialExpiry: user.trialExpiry || null
       }
     };
   }

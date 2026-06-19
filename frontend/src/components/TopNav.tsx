@@ -13,8 +13,18 @@ export function TopNav() {
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notifications, setNotifications] = useState<any[]>([])
   const [isPremiumTrial, setIsPremiumTrial] = useState(false)
+  const [timeLeft, setTimeLeft] = useState<string | null>(null)
   
   const currentProfileId = typeof window !== 'undefined' ? localStorage.getItem("profileId") : null;
+
+  const handleLogout = () => {
+    localStorage.removeItem("token")
+    localStorage.removeItem("profileId")
+    localStorage.removeItem("isDemo")
+    localStorage.removeItem("isPremiumTrial")
+    localStorage.removeItem("trialExpiry")
+    router.push("/login")
+  }
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -23,19 +33,49 @@ export function TopNav() {
   }, [])
 
   useEffect(() => {
-    if (currentProfileId) {
+    if (!isPremiumTrial) return;
+    const expiryStr = typeof window !== 'undefined' ? localStorage.getItem("trialExpiry") : null;
+    if (!expiryStr) return;
+
+    const expiryTime = new Date(expiryStr).getTime();
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const difference = expiryTime - now;
+
+      if (difference <= 0) {
+        setTimeLeft("Expired");
+        clearInterval(interval);
+        handleLogout();
+        return;
+      }
+
+      const seconds = Math.floor((difference / 1000) % 60);
+      const minutes = Math.floor((difference / 1000 / 60) % 60);
+      const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+
+      let formattedTime = "";
+      if (days > 0) {
+        formattedTime += `${days}d `;
+      }
+      formattedTime += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      setTimeLeft(formattedTime);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [isPremiumTrial]);
+
+  useEffect(() => {
+    if (currentProfileId && pathname !== "/subscription") {
       api.getNotifications(currentProfileId).then(data => {
         setNotifications(data)
       }).catch(console.error)
     }
-  }, [currentProfileId])
-
-  const handleLogout = () => {
-    localStorage.removeItem("token")
-    localStorage.removeItem("profileId")
-    localStorage.removeItem("isDemo")
-    router.push("/login")
-  }
+  }, [currentProfileId, pathname])
 
   const markAsRead = async (id: string) => {
     if (!currentProfileId) return;
@@ -105,6 +145,13 @@ export function TopNav() {
 
         {/* Right section: Icons and Profile */}
         <div className="flex items-center gap-6">
+          {isPremiumTrial && timeLeft && (
+            <div className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/25 text-yellow-500 text-xs px-3.5 py-1.5 rounded-xl font-mono font-bold shadow-sm shadow-yellow-500/5 select-none transition-all">
+              <Clock size={13} className="text-yellow-500" />
+              <span>Expires: {timeLeft}</span>
+            </div>
+          )}
+
           <Link href="/search" className="text-white/80 hover:text-white transition">
             <Search size={22} />
           </Link>
