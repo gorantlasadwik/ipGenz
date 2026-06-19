@@ -29,129 +29,109 @@ A modern, Netflix-inspired IPTV platform that unifies Live TV, Movies, and Serie
 
 ## 📸 Screenshots
 
-| Cinematic Dashboard | Live TV Channels |
+| Cinematic Home Dashboard | Dynamic Global Search |
 |---|---|
-| <img src="docs/images/landing-v3.png" width="100%" /> | <img src="docs/images/live-tv-v3.png" width="100%" /> |
-| **Movies Library** | **Series Management** |
-| <img src="docs/images/movies-v3.png" width="100%" /> | <img src="docs/images/series-v3.png" width="100%" /> |
-| **Live TV Streaming Player** | **Movie Player Example** |
-| <img src="docs/images/live-tv-screaming-player-v3.png" width="100%" /> | <img src="docs/images/movie-player-v3.png" width="100%" /> |
-| **Provider Dashboard** | **Playlist Syncing Progress** |
+| <img src="docs/images/dashboard.png" width="100%" /> | <img src="docs/images/landing-v3.png" width="100%" /> |
+| **Movies Library Catalog** | **Movie Details & Metadata** |
+| <img src="docs/images/movies-v3.png" width="100%" /> | <img src="docs/images/movie-description-page.png" width="100%" /> |
+| **High-Performance Movie Player** | **Advanced Alternate Video Player** |
+| <img src="docs/images/movie-player-v3.png" width="100%" /> | <img src="docs/images/movie-player-another-example.png" width="100%" /> |
+| **Live TV Category Guide** | **Live TV Player with Embedded EPG** |
+| <img src="docs/images/live-tv-v3.png" width="100%" /> | <img src="docs/images/live-tv-screaming-player-v3.png" width="100%" /> |
+| **Series & Boxsets Navigator** | **Personal Library & Favorites** |
+| <img src="docs/images/series-v3.png" width="100%" /> | <img src="docs/images/library-page.png" width="100%" /> |
+| **IPTV Provider Integration** | **Real-Time Playlist Synchronization** |
 | <img src="docs/images/provider-page-v3.png" width="100%" /> | <img src="docs/images/playlist-sync-v3.png" width="100%" /> |
 
 ---
 
 ## ✨ Vision
 
-ipGenz is not just another standard IPTV player. 
-
-It is a completely unified IPTV ecosystem that allows users to connect to multiple IPTV providers while effortlessly preserving provider folder structures. Delivering content through a premium, cinematic streaming interface, ipGenz aims to replace native cable boxes with a deeply personalized, Netflix-grade application.
+ipGenz is a completely unified IPTV ecosystem that allows users to aggregate multiple IPTV subscriptions into a single, high-performance web interface. By preserving complex folder/category structures and enriching raw streams with rich, Netflix-grade metadata, ipGenz provides a premium cinematic streaming alternative to clunky native applications.
 
 Users can aggregate content from:
-* Xtream Codes API
-* Standard M3U / M3U8 Playlists
-* MAG Portals (Planned)
-* Custom Feeds
+* **Xtream Codes API:** Native communication with IPTV servers.
+* **M3U / M3U8 Playlists:** Automatic local/remote list ingestion.
+* **Custom Live Feeds:** Direct stream link embedding.
 
 ---
 
 ## 🎯 Key Features & Capabilities
 
-### 📺 Live TV Architecture
-* **Live Channel Streaming:** Instantly zaps between live channels using an optimized player architecture.
-* **EPG Integration:** Fully supports Electronic Program Guides to show what's currently airing and what's next.
-* **Channel Categories:** Seamless categorization synchronized directly from your provider.
-* **Multi-View Setup:** Allows playback of multiple channels simultaneously.
-* **Favorites & Recents:** Never lose your most-watched sports or news channels.
-* **Global Search:** Find specific channels across hundreds of thousands of entries in milliseconds.
+### 📺 Cinematic Live TV Experience
+* **Sub-Second Channel Zapping:** Highly optimized buffering engine that ensures live channels start playing in less than 500ms.
+* **Electronic Program Guide (EPG) Engine:** Fully parses XMLTV program guides and correlates schedules with live streams in real time.
+* **Dynamic Stream Info Panel:** Displays current channel resolution, frame rate, and bandwidth directly in the player overlay.
+* **Multi-View Grid Layout:** Run up to 4 live sports channels concurrently in a split-screen arrangement.
+* **Intelligent Recents & Favorites:** Access your most-watched sports, news, and entertainment feeds instantly from the navigation header.
 
-### 🎬 Movies (VOD)
-* **Netflix-Style UI:** Beautiful hero banners, backdrops, and meticulously crafted typography.
-* **Automated TMDB Enrichment:** Automatically fetches missing high-resolution posters, backdrops, and plots from The Movie Database (TMDB).
-* **Continue Watching:** Stop a movie and resume it from the exact second you left off on any device.
-* **Watch Later & Favorites:** Add movies to your personal library.
-* **Playback Controls:** Fully custom video player interface with speed controls, picture-in-picture, and aspect ratio modifications.
+### 🎬 Netflix-Grade Movies & VOD
+* **Immersive Hero Banners:** Edge-to-edge cinematic previews with high-resolution backdrops, plots, genres, and cast details.
+* **Continue Watching:** Tracks your exact playing coordinate to the millisecond, letting you resume streaming seamlessly.
+* **Playback Enhancements:** Customized HTML5 player controls including picture-in-picture, custom aspect-ratio scaling (16:9, 4:3, stretch), playback speed variables (0.5x to 2x), and smart volume boosting.
+* **Personalized Watch Later Lists:** Curate your private library across single or multiple providers.
 
-### 📚 Series & Boxsets
-* **Season & Episode Management:** Beautifully groups hundreds of episodes into collapsible season lists.
-* **Episode Tracking:** Remembers exactly which episodes you've watched.
-* **Auto-Play Next:** Seamlessly transitions to the next episode for uninterrupted binge-watching.
-* **Resume Playback:** Memorizes your timestamp for every single episode independently.
+### 📚 Detailed Series & Season Navigators
+* **Boxset Consolidation:** Collapses hundreds of episodes into collapsible, clean season folders.
+* **Episode Progress Markers:** Highlights watched episodes and tracks mid-episode timestamps.
+* **Auto-Play Next Episode:** Automatically pre-buffers and cues the next episode for uninterrupted binge-watching.
 
-### 👤 Profile Management & Security
-* **Multiple Profiles:** Create unique profiles for family members within a single account.
-* **PIN Protection (Profile Locks):** 4-digit PIN locks secure individual profiles to prevent unauthorized access.
-* **Child Profiles:** Content restrictions explicitly configured via locked profiles.
-* **Isolated Libraries:** Every profile maintains its own independent *Watch History*, *Favorites*, *Watch Later*, and *Playlists*.
+### 👤 Profile Lock & Kid-Safe Restrictions
+* **Multi-Profile Accounts:** Support for up to 5 family member profiles under a single log-in.
+* **Symmetric Profile PIN Protection:** Secure your private profiles with a 4-digit PIN to prevent access by other family members.
+* **Kid Profiles:** Restricts content access based on mature ratings and filters categories automatically.
+* **Isolated Datasets:** Watch history, bookmarks, continue watching coordinates, and search histories are strictly isolated per profile.
 
-### 🔍 Unified Global Search Engine
-Our custom-built search engine allows you to find content instantaneously across your entire database.
-* **Cross-Category Searching:** Searches Movies, Series, Episodes, and Live Channels simultaneously.
-* **Fuzzy Search capabilities:** Finds what you're looking for even if you misspell it slightly.
-* **Instant Results:** Debounced and heavily indexed in PostgreSQL for immediate retrieval.
-
-### ❤️ Personalization & Playlists
-* **Custom Playlists:** Users can create custom playlists and mix-and-match Live Channels, VODs, and Series.
-* **Recently Watched tracking.**
-* **Recommendations:** "Because you watched..." logic based on viewing history.
+### 🔍 Search Engine
+* **Instant In-Memory Indexing:** Search through thousands of movies, series, episodes, and live channels simultaneously.
+* **Fuzzy Match Engine:** Retrieves correct streams even when spelling contains minor typos.
 
 ---
 
-## 🏗 Backend Architecture & Sync Engine
+## 🏗 Ingestion, Metadata & Playback Architecture
 
-### Supported Login Types
-#### Xtream Codes
-* **Inputs:** Server URL, Username, Password.
-* **Engine:** Makes direct API calls via the `player_api.php` endpoints to authenticate and pull structured JSON libraries.
+### 📥 High-Throughput Ingestion Engine
+Ingesting massive IPTV playlists containing up to 100k+ streams is handled asynchronously:
+* **Chunked Pipeline Syncing:** Batches database operations to prevent CPU bottlenecks on the backend.
+* **Delta Synchronization:** Compares existing channel/VOD IDs to only fetch, write, and delete updated items.
+* **Background Worker Processing:** Syncs run asynchronously in the background. The user sees a real-time progress bar detailing exactly how many items have been processed.
+* **Database Cleanup Tasks:** Automatically removes orphaned categories and streams when a provider is detached or updated.
 
-#### M3U
-* **Inputs:** Remote M3U URL.
-* **Engine:** High-performance stream parser that breaks down massive `.m3u` files into Live Channels and VODs based on metadata tags.
+### 🏷 TMDB Metadata Enrichment
+* **Automated Query Builder:** Scrubs raw stream titles (e.g. removing release quality tags, file extensions) to construct optimal search queries.
+* **Fuzzy Title Matching:** Queries the TMDB database for matching movies/series and validates matches using release year comparisons.
+* **Metadata & Artwork Caching:** Downloads and serves high-resolution artwork through an optimized caching layer to minimize external API rate-limiting issues.
 
-### The Ingestion Engine
-Ingesting IPTV playlists involves processing hundreds of thousands of items. ipGenz handles this gracefully:
-* **Background Processing:** Providers are synced asynchronously in the background. The user sees a real-time progress bar detailing exactly how many items have been processed.
-* **Smart Deduplication:** Avoids storing duplicate TMDB metadata.
-* **Atomic Transactions:** Ensures partial sync failures do not corrupt your library.
+### 🎞 Supported Stream Formats & Codecs
+ipGenz leverages a hybrid player stack to handle standard web streams and raw broadcasting formats directly in browser contexts.
 
----
-
-## 🎞 Supported Stream Formats & Codecs
-
-ipGenz utilizes advanced web video players capable of streaming nearly any format natively in modern browsers.
-
-### The Player Stack
+#### The Player Stack
 <div style="display: flex; gap: 10px; margin-bottom: 10px;">
   <img src="https://img.shields.io/badge/Video.js-v8.0-blue?style=flat-square" alt="Video.js" />
   <img src="https://img.shields.io/badge/Shaka_Player-v4.3-green?style=flat-square" alt="Shaka Player" />
   <img src="https://img.shields.io/badge/Mpegts.js-Active-orange?style=flat-square" alt="Mpegts.js" />
 </div>
 
-* **Shaka Player:** Used heavily for VODs (Movies & Series). Supports adaptive bitrate streaming via **DASH (.mpd)** and **HLS (.m3u8)**.
-* **Mpegts.js:** Handles complex Live TV streams broadcasted in raw **MPEG-TS (.ts)** format directly in the browser over HTTP/WebSocket without requiring external transcoding.
-* **Native HTML5:** Used as a fallback for standard **MP4** and **WebM** formats.
-
-### Audio & Subtitle Codecs
-* **Audio:** AAC, MP3, AC3 (Dolby Digital via Edge/Safari native support), EAC3, Vorbis, FLAC.
-* **Subtitles:** Native support for rendering WebVTT and extracting embedded multi-lingual subtitles via Shaka Player. 
+* **Shaka Player:** Used for VOD playback (Movies & Series). Supports adaptive bitrate streaming over **DASH (.mpd)** and **HLS (.m3u8)**.
+* **Mpegts.js:** Demuxes raw **MPEG-TS (.ts)** live television streams on the fly into native HTML5 video tags, eliminating the need for CPU-intensive server-side transcoding.
+* **Audio Codecs:** Supports AAC, MP3, AC3/EAC3 (Dolby Digital/Dolby Digital Plus via browser hardware passthrough), FLAC, and Vorbis.
+* **Subtitles:** Renders native WebVTT captions and handles multi-language subtitle track selection.
 
 ---
 
 ## 🔒 Security & Data Isolation
 
 ### Multi-Tenant Architecture
-Every user is strictly isolated via Prisma and PostgreSQL Row-Level logic.
-* Users cannot access or interact with other users' Providers, Playlists, or Credentials.
-* The API guards all endpoints using robust `JwtAuthGuards` via Passport.js.
+* **Strict SQL Separation:** Every account's data (Providers, Playlists, Profiles, Watch History) is separated at the database level.
+* **Route Protection:** All API endpoints are secured with JSON Web Tokens (JWT) using passport strategy logic.
 
-### Demo User Lockdown
-ipGenz features a secure **Demo Mode** (`demo@ipgenz.com`).
-* **UI Restrictions:** The frontend dynamically hides "Add Provider", Profile Creation, and Password modification options.
-* **Backend Enforcement:** The backend strictly enforces a `ForbiddenException` if the demo user attempts to mutate the database (e.g., adding favorites, modifying providers, locking profiles).
+### Demo User Mode
+* **Write Lockdowns:** Prevents mutations (e.g. deleting channels, modifying providers) via database interception.
+* **UI Controls:** Hides sensitive configuration options, password forms, and provider setup tabs automatically.
 
-### Credential Security
-* Provider passwords and URLs are securely encrypted and securely transmitted.
-* Auth tokens are signed via JWT and utilize secure payload transmission.
+### Symmetric Credential Protection
+* **AES-256 Encryption:** EncryptsXtream Codes server passwords and M3U URLs before database storage.
+* **Secure Environment Configuration:** System environment parameters reside strictly in isolated servers.
 
 ---
 
