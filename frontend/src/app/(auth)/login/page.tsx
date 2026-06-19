@@ -13,13 +13,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [isPremiumLogin, setIsPremiumLogin] = useState(false)
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleLogin = async (e: React.FormEvent, forceConfirm = false) => {
+    if (e) e.preventDefault()
     setLoading(true)
     setError("")
 
     try {
-      const data = await api.login(email, password)
+      const data = await api.login(email, password, forceConfirm)
       // In a real app, store data.access_token securely (e.g., HTTP-only cookie or localStorage for dev)
       localStorage.setItem("token", data.access_token)
       if (data.user?.isDemo) {
@@ -36,6 +36,13 @@ export default function LoginPage() {
       
       router.push("/profiles")
     } catch (err: any) {
+      if (err.requiresConfirmation || err.status === 409) {
+        const confirmLogout = window.confirm(err.message || "This account is already logged in on another device or IP. Do you want to log out the other device and sign in here?");
+        if (confirmLogout) {
+          handleLogin(null as any, true);
+          return;
+        }
+      }
       setError(err.message || "An error occurred during login")
     } finally {
       setLoading(false)

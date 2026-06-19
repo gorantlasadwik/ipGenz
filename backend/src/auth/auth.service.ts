@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, UnauthorizedException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -15,7 +15,7 @@ export class AuthService {
     private mailService: MailService
   ) {}
 
-  async validateUser(email: string, pass: string, ipAddress?: string): Promise<any> {
+  async validateUser(email: string, pass: string, ipAddress?: string, force?: boolean): Promise<any> {
     // Check if it's a 15-digit trial login
     if (email.length === 15 && /^\d+$/.test(email)) {
       const trialUser = await this.usersService.findByTrialUsername(email);
@@ -28,7 +28,19 @@ export class AuthService {
         // Strict 1 IP enforcement
         if (trialUser.assignedIp) {
           if (ipAddress && trialUser.assignedIp !== ipAddress) {
-            throw new UnauthorizedException('This account is locked to a different IP address.');
+            if (force) {
+              // Force logout: update to new IP
+              await this.usersService.updateAssignedIp(trialUser.id, ipAddress);
+            } else {
+              throw new HttpException(
+                {
+                  statusCode: 409,
+                  requiresConfirmation: true,
+                  message: 'This account is already logged in on another device or IP. Do you want to log out the other device and sign in here?',
+                },
+                HttpStatus.CONFLICT,
+              );
+            }
           }
         } else if (ipAddress) {
           // Lock to this IP

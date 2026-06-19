@@ -3,7 +3,10 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const originalFetch = typeof window !== 'undefined' ? window.fetch : globalThis.fetch;
 const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const res = await originalFetch(input, init);
-  if (res.status === 401) {
+  const urlString = typeof input === 'string' ? input : (input as any).url || '';
+  const isAuthRoute = urlString.includes('/auth/login') || urlString.includes('/auth/register') || urlString.includes('/auth/request-trial');
+  
+  if (res.status === 401 && !isAuthRoute) {
     if (typeof window !== 'undefined' && localStorage.getItem('token')) {
       localStorage.removeItem('token');
       localStorage.removeItem('profileId');
@@ -46,13 +49,19 @@ export const api = {
     return res.json();
   },
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, force?: boolean) {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, force }),
     });
-    if (!res.ok) throw new Error('Invalid credentials');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const errorObj = new Error(err.message || 'Invalid credentials');
+      (errorObj as any).status = res.status;
+      (errorObj as any).requiresConfirmation = err.requiresConfirmation || false;
+      throw errorObj;
+    }
     return res.json();
   },
 

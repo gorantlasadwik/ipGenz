@@ -8,7 +8,7 @@ export class AuthController {
   @Post('login')
   async login(@Request() req: any, @Body() body: any) {
     const ipAddress = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-    const user = await this.authService.validateUser(body.email, body.password, ipAddress);
+    const user = await this.authService.validateUser(body.email, body.password, ipAddress, body.force);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
