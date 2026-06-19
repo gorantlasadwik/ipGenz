@@ -17,7 +17,113 @@ export class MailService {
     }
 
     const senderEmail = process.env.SMTP_FROM_EMAIL || 'ipgenz.genz@gmail.com';
-    const senderName  = 'IPGENZ Premium';
+    const senderName  = 'IPGENZ';
+
+    // Plain-text version (important for spam score — emails with only HTML are flagged)
+    const textContent = `
+Welcome to IPGENZ!
+
+Your temporary access credentials are below. They expire in 24 hours.
+
+Username: ${trialUsername}
+Password: ${trialPassword}
+
+Visit https://ipgenz.vercel.app/login to sign in.
+
+These credentials are tied to the first device that logs in — keep them private.
+
+— The IPGENZ Team
+    `.trim();
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your IPGENZ Access</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#0a0a0a;border-radius:12px;overflow:hidden;max-width:600px;width:100%;">
+
+          <!-- Header -->
+          <tr>
+            <td style="padding:32px 40px 24px;border-bottom:1px solid #1a1a1a;">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">IPGENZ</p>
+              <p style="margin:4px 0 0;font-size:13px;color:#71717a;">Streaming · Delivered</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:36px 40px;">
+              <h1 style="margin:0 0 12px;font-size:24px;color:#ffffff;font-weight:700;">
+                Your Access Credentials
+              </h1>
+              <p style="margin:0 0 28px;font-size:15px;color:#a1a1aa;line-height:1.6;">
+                Welcome! Your 24-hour access has been provisioned. Use the credentials
+                below to sign in. They will expire in exactly <strong style="color:#ffffff;">24 hours</strong>.
+              </p>
+
+              <!-- Credentials box -->
+              <table width="100%" cellpadding="0" cellspacing="0"
+                     style="background:#141414;border:1px solid #262626;border-radius:10px;margin-bottom:28px;">
+                <tr>
+                  <td style="padding:20px 24px;">
+                    <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#52525b;text-transform:uppercase;letter-spacing:1px;">
+                      Username
+                    </p>
+                    <p style="margin:0 0 20px;font-size:20px;font-weight:700;color:#ffffff;font-family:monospace,monospace;letter-spacing:1px;">
+                      ${trialUsername}
+                    </p>
+                    <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#52525b;text-transform:uppercase;letter-spacing:1px;">
+                      Password
+                    </p>
+                    <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;font-family:monospace,monospace;letter-spacing:1px;">
+                      ${trialPassword}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA -->
+              <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                <tr>
+                  <td style="background:#e50914;border-radius:8px;">
+                    <a href="https://ipgenz.vercel.app/login"
+                       style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">
+                      Sign In Now →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0;font-size:13px;color:#52525b;line-height:1.6;">
+                These credentials are locked to the first device that uses them.
+                Do not share them with others.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 40px;border-top:1px solid #1a1a1a;">
+              <p style="margin:0;font-size:12px;color:#3f3f46;line-height:1.6;">
+                You received this email because someone requested a trial using this address on
+                <a href="https://ipgenz.vercel.app" style="color:#52525b;">ipgenz.vercel.app</a>.
+                If this was not you, please ignore this message.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 
     try {
       await axios.post(
@@ -25,31 +131,9 @@ export class MailService {
         {
           sender: { name: senderName, email: senderEmail },
           to: [{ email: toEmail }],
-          subject: 'Your 1-Day Premium IPTV Trial',
-          htmlContent: `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background-color: #050505; color: #ffffff; padding: 40px; border-radius: 16px;">
-              <h1 style="color: #ffffff; margin-bottom: 24px;">Your Premium Trial is Ready!</h1>
-              <p style="color: #a1a1aa; font-size: 16px; line-height: 1.6;">
-                Thank you for requesting a 1-day premium trial with IPGENZ. Your temporary credentials have been generated
-                and will expire in exactly 24 hours.
-              </p>
-              <div style="background-color: #111111; padding: 24px; border-radius: 12px; margin: 32px 0; border: 1px solid #333;">
-                <p style="margin: 0 0 8px 0; color: #a1a1aa; font-size: 12px; text-transform: uppercase;">Username</p>
-                <p style="margin: 0 0 24px 0; font-size: 24px; font-weight: bold; font-family: monospace;">${trialUsername}</p>
-                <p style="margin: 0 0 8px 0; color: #a1a1aa; font-size: 12px; text-transform: uppercase;">Password</p>
-                <p style="margin: 0; font-size: 24px; font-weight: bold; font-family: monospace;">${trialPassword}</p>
-              </div>
-              <p style="color: #a1a1aa; font-size: 14px;">
-                <strong>Note:</strong> These credentials are locked to the first IP address that logs in. Do not share them with anyone else.
-              </p>
-              <div style="margin-top: 40px; text-align: center;">
-                <a href="https://ipgenz.vercel.app/login"
-                   style="background-color: #e50914; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: bold; display: inline-block;">
-                  Login Now
-                </a>
-              </div>
-            </div>
-          `,
+          subject: 'Your IPGENZ access credentials',
+          textContent,
+          htmlContent,
         },
         {
           headers: {
