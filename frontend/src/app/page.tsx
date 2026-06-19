@@ -203,7 +203,7 @@ export default function PremiumLandingPage() {
           <div className="w-full max-w-5xl group perspective-1000">
             <div className="transition-transform duration-700 ease-out group-hover:rotate-x-[-2deg] group-hover:rotate-y-2 group-hover:scale-[1.02]">
               <BrowserFrame>
-                <img src="/images/landing-v3.png" alt="Global Search" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                <img src="/images/dashboard.png" alt="Global Search" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
               </BrowserFrame>
             </div>
           </div>
