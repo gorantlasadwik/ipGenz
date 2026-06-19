@@ -17,14 +17,24 @@ export class SyncController {
   @Post(':providerId')
   async triggerSync(@Request() req: any, @Param('providerId') providerId: string) {
     console.log(`[SyncController] triggerSync called with providerId=${providerId}, userId=${req.user?.userId}`);
-    // Verify ownership or demo provider
+    
     const demoUser = await this.prisma.user.findUnique({ where: { email: 'demo@ipgenz.com' } });
-    console.log(`[SyncController] demoUser=${demoUser?.id}`);
+    const trialMasterUser = await this.prisma.user.findUnique({ where: { email: 'trial_master@ipgenz.com' } });
+    
     const provider = await this.prisma.provider.findFirst({
       where: { id: providerId },
     });
 
-    if (!provider || (provider.userId !== req.user.userId && provider.userId !== demoUser?.id)) {
+    if (!provider) {
+      return { error: 'Provider not found or unauthorized' };
+    }
+
+    const isOwner = provider.userId === req.user.userId;
+    const isDemo = demoUser && provider.userId === demoUser.id;
+    const isTrialMaster = trialMasterUser && provider.userId === trialMasterUser.id;
+    const isAdmin = !req.user.isPremiumTrial && req.user.email !== 'demo@ipgenz.com';
+
+    if (!isOwner && !isDemo && !(isTrialMaster && isAdmin)) {
       return { error: 'Provider not found or unauthorized' };
     }
 
