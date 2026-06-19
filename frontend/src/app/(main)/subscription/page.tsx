@@ -33,8 +33,9 @@ const PLANS = [
 
 const UPI_ID = "sadwik.india@oksbi"
 
-function getQrUrl(price: number) {
-  const upiUrl = `upi://pay?pa=${UPI_ID}&pn=IPGENZ&am=${price}&cu=INR`
+function getQrUrl(price: number, planName: string) {
+  const note = `IPGENZ ${planName}`
+  const upiUrl = `upi://pay?pa=${UPI_ID}&pn=Sadwik&am=${price.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`
   return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiUrl)}`
 }
 
@@ -202,7 +203,7 @@ export default function SubscriptionPage() {
                   {/* QR Code */}
                   <div className="flex justify-center">
                     <div className="bg-white p-3 rounded-2xl">
-                      <img src={getQrUrl(selectedPlan.price)} alt="UPI QR Code" width={220} height={220} className="rounded-xl" />
+                      <img src={getQrUrl(selectedPlan.price, selectedPlan.name)} alt="UPI QR Code" width={220} height={220} className="rounded-xl" />
                     </div>
                   </div>
 
