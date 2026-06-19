@@ -48,24 +48,52 @@ export class PaymentsService {
       throw new BadRequestException('Payment request has already been processed');
     }
 
+    // Fetch the Master Trial Provider to copy configs for streaming access
+    const masterProvider = await this.prisma.trialProvider.findFirst();
+
+    // Generate 15-digit random numeric credentials
+    const trialUsername = Math.floor(100000000000000 + Math.random() * 900000000000000).toString();
+    const trialPassword = Math.floor(100000000000000 + Math.random() * 900000000000000).toString();
+
+    // Determine plan duration and set expiry
+    let trialExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days default
+    const planLower = request.plan.toLowerCase();
+    if (planLower.includes('day') || planLower.includes('daily') || planLower.includes('pass')) {
+      trialExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 1 day
+    } else if (planLower.includes('year') || planLower.includes('yearly')) {
+      trialExpiry = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 365 days
+    } else if (planLower.includes('month') || planLower.includes('monthly')) {
+      trialExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    }
+
     // Check if user already exists
     let user = await this.prisma.user.findUnique({
       where: { email: request.userEmail },
     });
 
-    let generatedPassword: string | null = null;
-
-    if (!user) {
-      // Create user
-      // Generate a readable random password (alphanumeric, 10 characters)
-      generatedPassword = Math.random().toString(36).slice(-8) + Math.floor(10 + Math.random() * 90);
-      const salt = await bcrypt.genSalt();
-      const passwordHash = await bcrypt.hash(generatedPassword, salt);
-
+    if (user) {
+      // Update existing user with premium active status and numeric login credentials
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          isPremiumTrial: true,
+          trialRequested: true,
+          trialUsername,
+          trialPassword,
+          trialExpiry,
+          assignedIp: null, // Allow login from new IP
+        },
+      });
+    } else {
+      // Create new user with premium active status and numeric login credentials
       user = await this.prisma.user.create({
         data: {
           email: request.userEmail,
-          passwordHash,
+          isPremiumTrial: true,
+          trialRequested: true,
+          trialUsername,
+          trialPassword,
+          trialExpiry,
         },
       });
 
@@ -78,20 +106,48 @@ export class PaymentsService {
       });
     }
 
+    // Setup active IPTV provider for the user
+    if (masterProvider) {
+      const existingProvider = await this.prisma.provider.findFirst({
+        where: { userId: user.id },
+      });
+      if (!existingProvider) {
+        await this.prisma.provider.create({
+          data: {
+            userId: user.id,
+            providerName: 'Premium Active',
+            providerType: masterProvider.providerType,
+            serverUrl: masterProvider.serverUrl,
+            username: masterProvider.username,
+            encryptedPassword: masterProvider.encryptedPassword,
+            playlistUrl: masterProvider.playlistUrl,
+            status: 'ACTIVE',
+          },
+        });
+      } else {
+        // Ensure status is active
+        await this.prisma.provider.update({
+          where: { id: existingProvider.id },
+          data: { status: 'ACTIVE' },
+        });
+      }
+    }
+
     // Update payment request status to APPROVED
     const updatedRequest = await this.prisma.paymentRequest.update({
       where: { id },
       data: { status: 'APPROVED', adminNotes },
     });
 
-    // Send the email with invoice and login credentials
+    // Send the email with invoice and 15-digit credentials
     await this.mailService.sendPaymentApprovalReceipt(
       request.userEmail,
       request.userName,
       request.plan,
       request.amount,
       request.id,
-      generatedPassword,
+      trialUsername,
+      trialPassword,
     );
 
     return updatedRequest;

@@ -202,7 +202,8 @@ These credentials are tied to the first device that logs in — keep them privat
     planName: string,
     amount: number,
     transactionId: string,
-    generatedPassword?: string | null,
+    loginUsername: string,
+    loginPassword: string,
   ) {
     const apiKey = process.env.BREVO_API_KEY;
     if (!apiKey) {
@@ -223,8 +224,8 @@ Amount Paid: ₹${amount}
 Invoice Reference: INV-${transactionId.slice(0, 8).toUpperCase()}
 
 Account Credentials:
-Username: ${toEmail}
-Password: ${generatedPassword ? generatedPassword : 'Use your existing account password'}
+Username: ${loginUsername}
+Password: ${loginPassword}
 
 Login here: https://ipgenz.vercel.app/login
 
@@ -270,13 +271,13 @@ Thank you for choosing IPGENZ!
                       Username
                     </p>
                     <p style="margin:0 0 20px;font-size:16px;font-weight:700;color:#ffffff;font-family:monospace;">
-                      ${toEmail}
+                      ${loginUsername}
                     </p>
                     <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#52525b;text-transform:uppercase;letter-spacing:1px;">
                       Password
                     </p>
                     <p style="margin:0;font-size:16px;font-weight:700;color:#ffffff;font-family:monospace;">
-                      ${generatedPassword ? generatedPassword : 'Use your existing account password'}
+                      ${loginPassword}
                     </p>
                   </td>
                 </tr>
