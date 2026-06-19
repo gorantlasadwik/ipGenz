@@ -269,7 +269,16 @@ export default function SeriesDetailPage() {
                           <a 
                             href={api.downloadEpisodeUrl(ep.id)}
                             download
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              try {
+                                await api.checkDownloadLimit();
+                                window.location.href = api.downloadEpisodeUrl(ep.id);
+                              } catch (err: any) {
+                                alert(err.message || 'Download limit exceeded.');
+                              }
+                            }}
                             className="p-1.5 bg-white/5 hover:bg-white/10 rounded-md transition text-zinc-400 hover:text-white"
                             title="Download Episode"
                           >

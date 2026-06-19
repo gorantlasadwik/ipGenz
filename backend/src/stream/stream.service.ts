@@ -469,6 +469,39 @@ export class StreamService {
   }
 
   // --- DOWNLOAD PROXIES ---
+  async validateDownloadLimitOnly(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.isPremiumTrial) {
+      const now = new Date();
+      let shouldReset = true;
+      if (user.lastDownloadAt) {
+        const lastDownloadDate = new Date(user.lastDownloadAt);
+        const isSameDay =
+          now.getUTCFullYear() === lastDownloadDate.getUTCFullYear() &&
+          now.getUTCMonth() === lastDownloadDate.getUTCMonth() &&
+          now.getUTCDate() === lastDownloadDate.getUTCDate();
+
+        if (isSameDay) {
+          shouldReset = false;
+        }
+      }
+
+      if (!shouldReset && user.downloadsToday >= 1) {
+        throw new HttpException(
+          'Premium trial accounts are limited to 1 download per day.',
+          HttpStatus.FORBIDDEN
+        );
+      }
+    }
+  }
+
   private async checkAndIncrementDownloadLimit(userId: string) {
     const user: any = await this.prisma.user.findUnique({
       where: { id: userId },

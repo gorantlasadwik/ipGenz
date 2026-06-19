@@ -542,6 +542,22 @@ export const api = {
     return res.json();
   },
 
+  async checkDownloadLimit() {
+    const res = await fetch(`${API_BASE}/stream/download/check-limit`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => 'no text');
+      let msg = 'Download limit exceeded or unauthorized';
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed.message) msg = parsed.message;
+      } catch (e) {}
+      throw new Error(msg);
+    }
+    return res.json();
+  },
+
   // ─── DOWNLOAD URLS ──────────────────────────────────────────────────────
   downloadMovieUrl: (movieId: string) => `${API_BASE}/stream/download/movie/${movieId}?token=${getToken()}`,
   downloadEpisodeUrl: (episodeId: string) => `${API_BASE}/stream/download/episode/${episodeId}?token=${getToken()}`,

@@ -67,6 +67,12 @@ export class StreamController {
     return this.streamService.getEpisodeStreamInfo(episodeId, targetUserId);
   }
 
+  @Get('download/check-limit')
+  async checkDownloadLimit(@Request() req: any) {
+    await this.streamService.validateDownloadLimitOnly(req.user.userId);
+    return { allowed: true };
+  }
+
   @Get('download/movie/:movieId')
   async downloadMovie(
     @Request() req: any,
