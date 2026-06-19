@@ -14,6 +14,7 @@ export function TopNav() {
   const [notifications, setNotifications] = useState<any[]>([])
   const [isPremiumTrial, setIsPremiumTrial] = useState(false)
   const [timeLeft, setTimeLeft] = useState<string | null>(null)
+  const [isExpired, setIsExpired] = useState(false)
   
   const currentProfileId = typeof window !== 'undefined' ? localStorage.getItem("profileId") : null;
 
@@ -28,7 +29,14 @@ export function TopNav() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setIsPremiumTrial(localStorage.getItem("isPremiumTrial") === "true")
+      const isPremium = localStorage.getItem("isPremiumTrial") === "true";
+      setIsPremiumTrial(isPremium);
+      if (isPremium) {
+        const expiryStr = localStorage.getItem("trialExpiry");
+        if (expiryStr && new Date().getTime() > new Date(expiryStr).getTime()) {
+          setIsExpired(true);
+        }
+      }
     }
   }, [])
 
@@ -45,8 +53,11 @@ export function TopNav() {
 
       if (difference <= 0) {
         setTimeLeft("Expired");
+        setIsExpired(true);
         clearInterval(interval);
-        handleLogout();
+        if (pathname !== "/subscription") {
+          router.push("/subscription");
+        }
         return;
       }
 
@@ -67,7 +78,7 @@ export function TopNav() {
     const interval = setInterval(updateTimer, 1000);
 
     return () => clearInterval(interval);
-  }, [isPremiumTrial]);
+  }, [isPremiumTrial, pathname]);
 
   useEffect(() => {
     if (currentProfileId && pathname !== "/subscription") {
@@ -108,39 +119,41 @@ export function TopNav() {
             IPGENZ
           </Link>
           
-          <nav className="hidden md:flex items-center gap-6">
-            {navLinks.map((link) => (
-              <Link
-                key={link.name}
-                href={link.path}
-                className={`text-sm font-bold tracking-widest transition-colors ${
-                  pathname === link.path ? "text-white" : "text-white/60 hover:text-white"
-                }`}
-              >
-                {link.name}
-              </Link>
-            ))}
-            
-            {/* Library Dropdown */}
-            <div className="relative group">
-              <span className={`text-sm font-bold tracking-widest transition-colors cursor-pointer py-4 ${pathname.includes('/library') ? "text-white" : "text-white/60 hover:text-white"}`}>
-                LIBRARY
-              </span>
-              <div className="absolute top-[100%] left-0 pt-2 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50">
-                <div className="bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden py-2">
-                  <Link href="/library/favorites" className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-white/80 hover:text-white hover:bg-white/10 transition">
-                    <Heart size={16} /> FAVORITES
-                  </Link>
-                  <Link href="/library/watch-later" className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-white/80 hover:text-white hover:bg-white/10 transition">
-                    <Clock size={16} /> WATCH LATER
-                  </Link>
-                  <Link href="/library/history" className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-white/80 hover:text-white hover:bg-white/10 transition">
-                    <History size={16} /> HISTORY
-                  </Link>
+          {!isExpired && (
+            <nav className="hidden md:flex items-center gap-6">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.name}
+                  href={link.path}
+                  className={`text-sm font-bold tracking-widest transition-colors ${
+                    pathname === link.path ? "text-white" : "text-white/60 hover:text-white"
+                  }`}
+                >
+                  {link.name}
+                </Link>
+              ))}
+              
+              {/* Library Dropdown */}
+              <div className="relative group">
+                <span className={`text-sm font-bold tracking-widest transition-colors cursor-pointer py-4 ${pathname.includes('/library') ? "text-white" : "text-white/60 hover:text-white"}`}>
+                  LIBRARY
+                </span>
+                <div className="absolute top-[100%] left-0 pt-2 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50">
+                  <div className="bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden py-2">
+                    <Link href="/library/favorites" className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-white/80 hover:text-white hover:bg-white/10 transition">
+                      <Heart size={16} /> FAVORITES
+                    </Link>
+                    <Link href="/library/watch-later" className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-white/80 hover:text-white hover:bg-white/10 transition">
+                      <Clock size={16} /> WATCH LATER
+                    </Link>
+                    <Link href="/library/history" className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-white/80 hover:text-white hover:bg-white/10 transition">
+                      <History size={16} /> HISTORY
+                    </Link>
+                  </div>
                 </div>
               </div>
-            </div>
-          </nav>
+            </nav>
+          )}
         </div>
 
         {/* Right section: Icons and Profile */}
@@ -152,59 +165,63 @@ export function TopNav() {
             </div>
           )}
 
-          <Link href="/search" className="text-white/80 hover:text-white transition">
-            <Search size={22} />
-          </Link>
+          {!isExpired && (
+            <Link href="/search" className="text-white/80 hover:text-white transition">
+              <Search size={22} />
+            </Link>
+          )}
 
           {/* Notifications Dropdown */}
-          <div className="relative">
-            <button 
-              onClick={() => { setNotificationsOpen(!notificationsOpen); setProfileOpen(false); }}
-              className="text-white/80 hover:text-white transition relative"
-            >
-              <Bell size={22} />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
+          {!isExpired && (
+            <div className="relative">
+              <button 
+                onClick={() => { setNotificationsOpen(!notificationsOpen); setProfileOpen(false); }}
+                className="text-white/80 hover:text-white transition relative"
+              >
+                <Bell size={22} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
 
-            {notificationsOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setNotificationsOpen(false)} />
-                <div className="absolute right-0 mt-4 w-80 max-h-96 overflow-y-auto bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl z-50 text-white">
-                  <div className="px-4 py-3 border-b border-white/10 flex justify-between items-center sticky top-0 bg-zinc-900/95">
-                    <p className="font-bold">Notifications</p>
-                    {unreadCount > 0 && (
-                      <button onClick={markAllAsRead} className="text-xs text-primary hover:text-primary/80">Mark all as read</button>
-                    )}
-                  </div>
-                  
-                  <div className="py-2">
-                    {notifications.length === 0 ? (
-                      <p className="px-4 py-6 text-center text-white/50 text-sm">No notifications yet.</p>
-                    ) : (
-                      notifications.map(n => (
-                        <div 
-                          key={n.id} 
-                          onClick={() => { if (!n.isRead) markAsRead(n.id); }}
-                          className={`px-4 py-3 border-b border-white/5 hover:bg-white/5 cursor-pointer transition ${n.isRead ? 'opacity-60' : 'bg-primary/5'}`}
-                        >
-                          <div className="flex justify-between items-start mb-1">
-                            <p className={`text-sm ${n.isRead ? 'font-medium' : 'font-bold'}`}>{n.title}</p>
-                            {!n.isRead && <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1" />}
+              {notificationsOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setNotificationsOpen(false)} />
+                  <div className="absolute right-0 mt-4 w-80 max-h-96 overflow-y-auto bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl z-50 text-white">
+                    <div className="px-4 py-3 border-b border-white/10 flex justify-between items-center sticky top-0 bg-zinc-900/95">
+                      <p className="font-bold">Notifications</p>
+                      {unreadCount > 0 && (
+                        <button onClick={markAllAsRead} className="text-xs text-primary hover:text-primary/80">Mark all as read</button>
+                      )}
+                    </div>
+                    
+                    <div className="py-2">
+                      {notifications.length === 0 ? (
+                        <p className="px-4 py-6 text-center text-white/50 text-sm">No notifications yet.</p>
+                      ) : (
+                        notifications.map(n => (
+                          <div 
+                            key={n.id} 
+                            onClick={() => { if (!n.isRead) markAsRead(n.id); }}
+                            className={`px-4 py-3 border-b border-white/5 hover:bg-white/5 cursor-pointer transition ${n.isRead ? 'opacity-60' : 'bg-primary/5'}`}
+                          >
+                            <div className="flex justify-between items-start mb-1">
+                              <p className={`text-sm ${n.isRead ? 'font-medium' : 'font-bold'}`}>{n.title}</p>
+                              {!n.isRead && <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1" />}
+                            </div>
+                            <p className="text-xs text-white/70 line-clamp-2">{n.message}</p>
+                            <p className="text-[10px] text-white/40 mt-2">{new Date(n.createdAt).toLocaleDateString()}</p>
                           </div>
-                          <p className="text-xs text-white/70 line-clamp-2">{n.message}</p>
-                          <p className="text-[10px] text-white/40 mt-2">{new Date(n.createdAt).toLocaleDateString()}</p>
-                        </div>
-                      ))
-                    )}
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
+          )}
           
           <div className="relative">
             <button 
