@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 
 @Injectable()
@@ -83,7 +83,7 @@ export class MailService {
       this.logger.log(`Sent trial credentials email to ${toEmail}`);
     } catch (error: any) {
       this.logger.error(`Failed to send email to ${toEmail}:`, error);
-      throw new Error(`SMTP Error from Render: ${error.message}. Please check your Render Environment Variables!`);
+      throw new InternalServerErrorException(`Email delivery failed: ${error.message}`);
     }
   }
 }

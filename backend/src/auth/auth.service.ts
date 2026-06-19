@@ -123,6 +123,11 @@ export class AuthService {
     const trialPassword = Math.floor(100000000000000 + Math.random() * 900000000000000).toString();
     const trialExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
+    // 4. Send email FIRST — if this fails, NO database records are created
+    //    The user can safely retry without hitting "trial already requested"
+    await this.mailService.sendTrialCredentials(email, trialUsername, trialPassword);
+
+    // 5. Email sent successfully — now create DB records
     let userId: string;
 
     if (existingUser) {
@@ -154,7 +159,7 @@ export class AuthService {
       userId = created.id;
     }
 
-    // 4. Create default profile for the trial user
+    // 6. Create default profile for the trial user
     await this.prisma.profile.create({
       data: {
         userId,
@@ -162,7 +167,7 @@ export class AuthService {
       }
     });
 
-    // 5. Create cloned provider for the trial user
+    // 7. Create cloned provider for the trial user
     await this.prisma.provider.create({
       data: {
         userId,
@@ -175,9 +180,6 @@ export class AuthService {
         status: 'ACTIVE'
       }
     });
-
-    // 6. Email the user the 1-day trial credentials
-    await this.mailService.sendTrialCredentials(email, trialUsername, trialPassword);
 
     return { success: true };
   }
