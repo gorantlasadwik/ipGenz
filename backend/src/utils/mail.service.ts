@@ -195,4 +195,186 @@ These credentials are tied to the first device that logs in — keep them privat
       this.logger.error('Failed to send payment alert:', e.response?.data?.message || e.message);
     });
   }
+
+  async sendPaymentApprovalReceipt(
+    toEmail: string,
+    userName: string,
+    planName: string,
+    amount: number,
+    transactionId: string,
+    generatedPassword?: string | null,
+  ) {
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) {
+      this.logger.warn(`BREVO_API_KEY not configured. Skipping payment approval receipt to ${toEmail}.`);
+      return;
+    }
+
+    const senderEmail = process.env.SMTP_FROM_EMAIL || 'ipgenz.genz@gmail.com';
+    const senderName = 'IPGENZ Payments';
+
+    const textContent = `
+Hi ${userName},
+
+Your manual payment has been verified and your subscription to IPGENZ is now active!
+
+Plan: ${planName}
+Amount Paid: ₹${amount}
+Invoice Reference: INV-${transactionId.slice(0, 8).toUpperCase()}
+
+Account Credentials:
+Username: ${toEmail}
+Password: ${generatedPassword ? generatedPassword : 'Use your existing account password'}
+
+Login here: https://ipgenz.vercel.app/login
+
+Thank you for choosing IPGENZ!
+    `.trim();
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment Approved & Invoice</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#0a0a0a;border-radius:12px;overflow:hidden;max-width:600px;width:100%;">
+          <!-- Header -->
+          <tr>
+            <td style="padding:32px 40px 24px;border-bottom:1px solid #1a1a1a;">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">IPGENZ</p>
+              <p style="margin:4px 0 0;font-size:13px;color:#71717a;">Streaming · Premium Access Active</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:36px 40px;">
+              <h1 style="margin:0 0 12px;font-size:24px;color:#22c55e;font-weight:700;">
+                Payment Approved!
+              </h1>
+              <p style="margin:0 0 28px;font-size:15px;color:#a1a1aa;line-height:1.6;">
+                Hi <strong>${userName}</strong>, your manual payment has been verified. Your subscription to the <strong style="color:#ffffff;">${planName}</strong> plan is now active. Use the credentials below to sign in and enjoy premium IPTV streaming.
+              </p>
+
+              <!-- Credentials box -->
+              <table width="100%" cellpadding="0" cellspacing="0"
+                     style="background:#141414;border:1px solid #262626;border-radius:10px;margin-bottom:28px;">
+                <tr>
+                  <td style="padding:20px 24px;">
+                    <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#52525b;text-transform:uppercase;letter-spacing:1px;">
+                      Username
+                    </p>
+                    <p style="margin:0 0 20px;font-size:16px;font-weight:700;color:#ffffff;font-family:monospace;">
+                      ${toEmail}
+                    </p>
+                    <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#52525b;text-transform:uppercase;letter-spacing:1px;">
+                      Password
+                    </p>
+                    <p style="margin:0;font-size:16px;font-weight:700;color:#ffffff;font-family:monospace;">
+                      ${generatedPassword ? generatedPassword : 'Use your existing account password'}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA -->
+              <table cellpadding="0" cellspacing="0" style="margin-bottom:36px;">
+                <tr>
+                  <td style="background:#e50914;border-radius:8px;">
+                    <a href="https://ipgenz.vercel.app/login"
+                       style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">
+                      Sign In Now →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Invoice Details -->
+              <div style="border-top:1px solid #1a1a1a;padding-top:28px;">
+                <h2 style="margin:0 0 16px;font-size:18px;color:#ffffff;font-weight:700;">
+                  Billing Invoice
+                </h2>
+                
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;font-size:13px;color:#a1a1aa;line-height:1.6;">
+                  <tr>
+                    <td style="padding-bottom:8px;"><strong>Invoice Number:</strong></td>
+                    <td align="right" style="color:#ffffff;padding-bottom:8px;font-family:monospace;">INV-${transactionId.slice(0, 8).toUpperCase()}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding-bottom:8px;"><strong>Date:</strong></td>
+                    <td align="right" style="color:#ffffff;padding-bottom:8px;">${new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding-bottom:8px;"><strong>Payment Method:</strong></td>
+                    <td align="right" style="color:#ffffff;padding-bottom:8px;">UPI (Manual Verification)</td>
+                  </tr>
+                </table>
+
+                <!-- Invoice Items Table -->
+                <table width="100%" cellpadding="0" cellspacing="0" style="background:#141414;border-radius:8px;font-size:13px;color:#ffffff;border:1px solid #262626;">
+                  <thead>
+                    <tr style="border-bottom:1px solid #262626;">
+                      <th align="left" style="padding:12px 16px;color:#71717a;font-weight:600;font-size:11px;text-transform:uppercase;">Description</th>
+                      <th align="right" style="padding:12px 16px;color:#71717a;font-weight:600;font-size:11px;text-transform:uppercase;">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style="padding:16px;color:#ffffff;">IPGENZ Premium - ${planName} Plan</td>
+                      <td align="right" style="padding:16px;color:#22c55e;font-weight:700;">₹${amount}.00</td>
+                    </tr>
+                    <tr style="border-top:1px solid #262626;background:#1a1a1a;">
+                      <td style="padding:16px;font-weight:700;color:#ffffff;">Total Paid</td>
+                      <td align="right" style="padding:16px;color:#22c55e;font-weight:700;font-size:15px;">₹${amount}.00</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 40px;border-top:1px solid #1a1a1a;">
+              <p style="margin:0;font-size:12px;color:#3f3f46;line-height:1.6;">
+                For support or billing inquiries, reply directly to this email or reach us at <a href="mailto:sadwik.india@gmail.com" style="color:#52525b;">sadwik.india@gmail.com</a>.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    try {
+      await axios.post(
+        'https://api.brevo.com/v3/smtp/email',
+        {
+          sender: { name: senderName, email: senderEmail },
+          to: [{ email: toEmail }],
+          subject: `✨ Your IPGENZ Access is Ready — Invoice #INV-${transactionId.slice(0, 8).toUpperCase()}`,
+          textContent,
+          htmlContent,
+        },
+        {
+          headers: {
+            'api-key': apiKey,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+        },
+      );
+      this.logger.log(`Sent payment approval and billing email to ${toEmail}`);
+    } catch (e: any) {
+      this.logger.error(`Failed to send payment approval email to ${toEmail}:`, e.response?.data?.message || e.message);
+    }
+  }
 }

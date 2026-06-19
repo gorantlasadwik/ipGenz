@@ -8,6 +8,7 @@ import * as os from 'os';
 import { ProviderType } from '@prisma/client';
 import { encryptString, decryptString } from '../utils/crypto.util';
 import { UsersService } from '../users/users.service';
+import { PaymentsService } from '../payments/payments.service';
 
 @Controller('sadwik')
 export class SadwikController {
@@ -28,6 +29,7 @@ export class SadwikController {
     private prisma: PrismaService,
     private codecService: CodecService,
     private observability: ObservabilityService,
+    private paymentsService: PaymentsService,
   ) {
     // Tick CPU load averages every 2 seconds
     setInterval(() => {
@@ -771,18 +773,12 @@ export class SadwikController {
 
   @Post('payment-requests/:id/approve')
   async approvePaymentRequest(@Param('id') id: string, @Body() body: any) {
-    return this.prisma.paymentRequest.update({
-      where: { id },
-      data: { status: 'APPROVED', adminNotes: body.notes || null },
-    });
+    return this.paymentsService.approveRequest(id, body.notes);
   }
 
   @Post('payment-requests/:id/reject')
   async rejectPaymentRequest(@Param('id') id: string, @Body() body: any) {
-    return this.prisma.paymentRequest.update({
-      where: { id },
-      data: { status: 'REJECTED', adminNotes: body.notes || null },
-    });
+    return this.paymentsService.rejectRequest(id, body.notes);
   }
 }
 
