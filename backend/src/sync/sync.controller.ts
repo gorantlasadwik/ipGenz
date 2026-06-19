@@ -32,9 +32,8 @@ export class SyncController {
     const isOwner = provider.userId === req.user.userId;
     const isDemo = demoUser && provider.userId === demoUser.id;
     const isTrialMaster = trialMasterUser && provider.userId === trialMasterUser.id;
-    const isAdmin = !req.user.isPremiumTrial && req.user.email !== 'demo@ipgenz.com';
 
-    if (!isOwner && !isDemo && !(isTrialMaster && isAdmin)) {
+    if (!isOwner && !isDemo && !isTrialMaster) {
       return { error: 'Provider not found or unauthorized' };
     }
 
