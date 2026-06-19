@@ -96,9 +96,23 @@ export default function PremiumLandingPage() {
             IPGENZ
           </div>
           
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-secondary-foreground">
-            <a href="#tour" className="hover:text-white transition">Product Tour</a>
-            <a href="https://github.com/gorantlasadwik/ipGenz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Changelog</a>
+          <nav className="hidden md:flex items-center bg-[#111111]/80 backdrop-blur-xl border border-white/10 rounded-full px-4 py-1 gap-1.5 text-[11px] font-bold tracking-wider text-zinc-400 uppercase shadow-xl shadow-black/50">
+            <a href="#tour" className="hover:text-white hover:bg-white/5 px-3 py-1.5 rounded-full transition duration-200">
+              Features
+            </a>
+            <Link href="/subscription" className="hover:text-white hover:bg-white/5 px-3 py-1.5 rounded-full transition duration-200">
+              Plans
+            </Link>
+            <Link href="/request-trial" className="text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10 px-3 py-1.5 rounded-full transition duration-200">
+              Trial
+            </Link>
+            <button 
+              onClick={handleDemoLogin}
+              disabled={isDemoLoading}
+              className="text-primary hover:text-red-400 hover:bg-primary/10 px-3 py-1.5 rounded-full transition duration-200 flex items-center gap-1 disabled:opacity-50"
+            >
+              <Sparkles className="w-3 h-3" /> Demo
+            </button>
           </nav>
 
           <div className="flex items-center gap-6">
