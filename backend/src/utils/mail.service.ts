@@ -151,4 +151,48 @@ These credentials are tied to the first device that logs in — keep them privat
       throw new InternalServerErrorException(`Email delivery failed: ${msg}`);
     }
   }
+
+  async sendPaymentAlert(request: {
+    id: string;
+    userEmail: string;
+    userName: string;
+    plan: string;
+    amount: number;
+    upiRef?: string | null;
+    createdAt: Date;
+  }) {
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) return;
+
+    const senderEmail = process.env.SMTP_FROM_EMAIL || 'ipgenz.genz@gmail.com';
+
+    await axios.post(
+      'https://api.brevo.com/v3/smtp/email',
+      {
+        sender: { name: 'IPGENZ Payments', email: senderEmail },
+        to: [{ email: 'sadwik.india@gmail.com' }],
+        subject: `💰 New Payment Request — ${request.plan} (₹${request.amount})`,
+        textContent: `New payment request received!\n\nName: ${request.userName}\nEmail: ${request.userEmail}\nPlan: ${request.plan}\nAmount: ₹${request.amount}\nUPI Ref: ${request.upiRef || 'Not provided'}\nTime: ${request.createdAt}\n\nReview at: https://ipgenz.vercel.app/sadwik/payments`,
+        htmlContent: `
+          <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;background:#0a0a0a;color:#fff;padding:32px;border-radius:12px;">
+            <h2 style="color:#22c55e;margin:0 0 20px;">💰 New Payment Request</h2>
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td style="color:#a1a1aa;padding:6px 0;font-size:13px;">Name</td><td style="font-weight:700;padding:6px 0;">${request.userName}</td></tr>
+              <tr><td style="color:#a1a1aa;padding:6px 0;font-size:13px;">Email</td><td style="font-weight:700;padding:6px 0;">${request.userEmail}</td></tr>
+              <tr><td style="color:#a1a1aa;padding:6px 0;font-size:13px;">Plan</td><td style="font-weight:700;padding:6px 0;">${request.plan}</td></tr>
+              <tr><td style="color:#a1a1aa;padding:6px 0;font-size:13px;">Amount</td><td style="font-weight:700;padding:6px 0;color:#22c55e;">₹${request.amount}</td></tr>
+              <tr><td style="color:#a1a1aa;padding:6px 0;font-size:13px;">UPI Ref</td><td style="font-weight:700;padding:6px 0;">${request.upiRef || 'Not provided'}</td></tr>
+            </table>
+            <div style="margin-top:28px;text-align:center;">
+              <a href="https://ipgenz.vercel.app/sadwik/payments" style="background:#e50914;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:700;display:inline-block;">
+                Review in Admin Panel →
+              </a>
+            </div>
+          </div>`,
+      },
+      { headers: { 'api-key': apiKey, 'Content-Type': 'application/json', Accept: 'application/json' } },
+    ).catch((e: any) => {
+      this.logger.error('Failed to send payment alert:', e.response?.data?.message || e.message);
+    });
+  }
 }

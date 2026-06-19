@@ -14,6 +14,7 @@ import { MetadataModule } from './metadata/metadata.module';
 import { ContentModule } from './content/content.module';
 import { LibraryModule } from './library/library.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     ContentModule,
     LibraryModule,
     NotificationsModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

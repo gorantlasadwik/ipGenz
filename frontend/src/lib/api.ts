@@ -78,6 +78,53 @@ export const api = {
     return res.json();
   },
 
+  // ─── PAYMENTS (Manual UPI) ───────────────────────────────────────────────
+  async submitPaymentRequest(data: {
+    userEmail: string;
+    userName: string;
+    plan: string;
+    amount: number;
+    upiRef?: string;
+    screenshotB64: string;
+  }) {
+    const res = await fetch(`${API_BASE}/payments/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to submit payment request');
+    }
+    return res.json();
+  },
+
+  async getAdminPaymentRequests() {
+    const res = await fetch(`${API_BASE}/sadwik/payment-requests`);
+    if (!res.ok) throw new Error('Failed to fetch payment requests');
+    return res.json();
+  },
+
+  async approvePaymentRequest(id: string, notes?: string) {
+    const res = await fetch(`${API_BASE}/sadwik/payment-requests/${id}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes }),
+    });
+    if (!res.ok) throw new Error('Failed to approve');
+    return res.json();
+  },
+
+  async rejectPaymentRequest(id: string, notes?: string) {
+    const res = await fetch(`${API_BASE}/sadwik/payment-requests/${id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes }),
+    });
+    if (!res.ok) throw new Error('Failed to reject');
+    return res.json();
+  },
+
   // ─── USERS / PREMIUM TRIALS ───────────────────────────────────────────────
   async getPremiumTrials() {
     const res = await fetch(`${API_BASE}/users/premium-trials`, { headers: authHeaders() });

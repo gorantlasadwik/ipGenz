@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Activity, Users, Database, Server, Settings, LayoutGrid, ShieldAlert, LogOut, Play, Film } from "lucide-react"
+import { Activity, Users, Database, Server, Settings, LayoutGrid, ShieldAlert, LogOut, Play, Film, CreditCard } from "lucide-react"
 import { api } from "@/lib/api"
 
 export default function AdminLayout({
@@ -158,6 +158,12 @@ export default function AdminLayout({
             href="/sadwik/premium" 
             icon={<ShieldAlert size={18} />} 
             label="Premium Subscriptions" 
+          />
+          <SidebarLink 
+            active={pathname === "/sadwik/payments"} 
+            href="/sadwik/payments" 
+            icon={<CreditCard size={18} />} 
+            label="Payment Requests" 
           />
           <SidebarLink 
             active={pathname === "/sadwik/settings"} 

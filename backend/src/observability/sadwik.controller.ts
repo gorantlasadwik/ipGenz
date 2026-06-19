@@ -759,5 +759,30 @@ export class SadwikController {
       _count: count,
     };
   }
+
+  // ── PAYMENT REQUESTS ────────────────────────────────────────────────────────
+
+  @Get('payment-requests')
+  async getPaymentRequests() {
+    return this.prisma.paymentRequest.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  @Post('payment-requests/:id/approve')
+  async approvePaymentRequest(@Param('id') id: string, @Body() body: any) {
+    return this.prisma.paymentRequest.update({
+      where: { id },
+      data: { status: 'APPROVED', adminNotes: body.notes || null },
+    });
+  }
+
+  @Post('payment-requests/:id/reject')
+  async rejectPaymentRequest(@Param('id') id: string, @Body() body: any) {
+    return this.prisma.paymentRequest.update({
+      where: { id },
+      data: { status: 'REJECTED', adminNotes: body.notes || null },
+    });
+  }
 }
 
