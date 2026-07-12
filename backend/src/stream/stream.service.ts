@@ -6,6 +6,7 @@ import type { Response } from 'express';
 import { CodecService } from './codec.service';
 import { ContentType } from '@prisma/client';
 import { spawn } from 'child_process';
+import { PassThrough } from 'stream';
 const ffmpegStatic = require('ffmpeg-static');
 
 @Injectable()
@@ -123,30 +124,46 @@ export class StreamService {
     res.on('close', () => { try { response.data.destroy(); } catch (_) {} });
   }
 
-  async handleTranscodeStream(streamUrl: string, transcodeType: 'AUDIO' | 'VIDEO', res: Response, audioTrack?: number, startTime?: number) {
-    this.logger.log(`Transcoding stream on-the-fly. Type: ${transcodeType}, URL: ${streamUrl}, AudioTrack: ${audioTrack !== undefined ? audioTrack : 'default'}, Start: ${startTime || 0}`);
+  async handleTranscodeStream(
+    streamUrl: string,
+    transcodeType: 'AUDIO' | 'VIDEO',
+    res: Response,
+    audioTrack?: number,
+    startTime?: number,
+    isLive = false,
+  ) {
+    this.logger.log(
+      `Transcoding stream. Type: ${transcodeType}, URL: ${streamUrl}, ` +
+      `AudioTrack: ${audioTrack ?? 'default'}, Start: ${startTime ?? 0}, Live: ${isLive}`
+    );
 
-    let response: any;
-    try {
-      response = await firstValueFrom(
-        this.httpService.get(streamUrl, {
-          responseType: 'stream',
-          decompress: false,
-          headers: {
-            'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
-            'Accept': '*/*',
-            'Accept-Encoding': 'identity',
-          }
-        }).pipe(
-          catchError(err => {
-            this.logger.error(`Failed to connect to IPTV provider for transcoding: ${err.message}`);
-            throw new HttpException('Provider Stream Offline', HttpStatus.BAD_GATEWAY);
-          })
-        )
-      );
-    } catch (e) {
-      if (!res.headersSent) res.status(502).send('Stream Unavailable');
-      return;
+    const streamHeaders = {
+      'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
+      'Accept': '*/*',
+      'Accept-Encoding': 'identity',
+    };
+
+    // For VOD: validate upstream before spawning FFmpeg.
+    // For live: the segment stitcher loop handles all requests — skip upfront validation.
+    let vodResponse: any = null;
+    if (!isLive) {
+      try {
+        vodResponse = await firstValueFrom(
+          this.httpService.get(streamUrl, {
+            responseType: 'stream',
+            decompress: false,
+            headers: streamHeaders,
+          }).pipe(
+            catchError(err => {
+              this.logger.error(`Failed to connect to provider for transcode: ${err.message}`);
+              throw new HttpException('Provider Stream Offline', HttpStatus.BAD_GATEWAY);
+            })
+          )
+        );
+      } catch (e) {
+        if (!res.headersSent) res.status(502).send('Stream Unavailable');
+        return;
+      }
     }
 
     const ffmpegPath = process.env.NODE_ENV === 'production' ? 'ffmpeg' : ffmpegStatic;
@@ -156,37 +173,26 @@ export class StreamService {
       args.push('-ss', startTime.toString());
     }
 
-    // Generate clean monotonic timestamps and drop corrupt packets to handle stream discontinuities without crashing
+    // Generate clean monotonic timestamps; discard corrupt packets & ignore bad DTS
     args.push('-fflags', '+genpts+discardcorrupt+igndts');
-    args.push('-i', 'pipe:0'); // read from stdin
+    args.push('-i', 'pipe:0');
 
     if (audioTrack !== undefined) {
-      // Map the first video stream and the selected audio stream index
       args.push('-map', '0:v?', '-map', `0:a:${audioTrack}`);
     }
 
     if (transcodeType === 'AUDIO') {
-      // Audio Transcode: copy video tracks, transcode audio to compatible stereo AAC
       args.push('-c:v', 'copy');
-      args.push('-c:a', 'aac');
-      args.push('-b:a', '128k');
-      args.push('-ac', '2');
+      args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
     } else {
-      // Video Transcode (e.g. MPEG-2/VC-1): transcode video to H.264 and audio to AAC
-      args.push('-c:v', 'libx264');
-      args.push('-preset', 'ultrafast');
-      args.push('-crf', '23');
-      args.push('-c:a', 'aac');
-      args.push('-b:a', '128k');
-      args.push('-ac', '2');
+      args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23');
+      args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
     }
 
-    // Ensure output timestamps are monotonically increasing starting from zero
     args.push('-avoid_negative_ts', 'make_zero');
     args.push('-muxdelay', '0');
     args.push('-max_muxing_queue_size', '1024');
-    args.push('-f', 'mpegts');
-    args.push('pipe:1');
+    args.push('-f', 'mpegts', 'pipe:1');
 
     res.set({
       'Content-Type': 'video/mp2t',
@@ -197,41 +203,150 @@ export class StreamService {
     });
 
     const ffmpegProcess = spawn(ffmpegPath, args) as any;
-
-    // Pipe raw downloaded stream into FFmpeg's stdin
-    response.data.pipe(ffmpegProcess.stdin);
-
-    // Pipe FFmpeg's transcoded output to client response
     ffmpegProcess.stdout.pipe(res);
 
     ffmpegProcess.stderr.on('data', (data: any) => {
       this.logger.warn(`FFmpeg Stderr: ${data.toString().trim()}`);
     });
-
     ffmpegProcess.on('error', (err: any) => {
-      this.logger.error(`FFmpeg process failed to spawn: ${err.message}`);
+      this.logger.error(`FFmpeg failed to spawn: ${err.message}`);
     });
 
-    ffmpegProcess.on('close', (code: any) => {
-      this.logger.log(`FFmpeg transcoding process exited with code ${code}`);
-      if (!res.writableEnded) res.end();
-    });
+    if (isLive) {
+      // ── LIVE: segment stitcher → FFmpeg stdin ──────────────────────────────
+      // A PassThrough acts as an infinite pipe. The stitcher loop keeps fetching
+      // new 33-second chunks and writing them in without ever closing the pipe.
+      // FFmpeg reads from it forever, so its stdout (→ res) never stops either.
+      const stitcher = new PassThrough();
+      let clientDisconnected = false;
 
-    response.data.on('end', () => {
-      try { ffmpegProcess.stdin.end(); } catch (_) {}
-    });
+      stitcher.pipe(ffmpegProcess.stdin);
 
-    response.data.on('error', (err: any) => {
-      this.logger.error(`Axios stream error during transcode: ${err.message}`);
-      try { ffmpegProcess.stdin.end(); } catch (_) {}
-    });
+      res.on('close', () => {
+        clientDisconnected = true;
+        this.logger.log('[Transcode+Stitch] Client left — killing FFmpeg.');
+        try { stitcher.destroy(); } catch (_) {}
+        try { ffmpegProcess.stdin.destroy(); } catch (_) {}
+        ffmpegProcess.kill('SIGKILL');
+      });
 
-    res.on('close', () => {
-      this.logger.log('Client connection closed. Killing FFmpeg process and destroying network stream...');
-      try { response.data.destroy(); } catch (_) {}
-      try { ffmpegProcess.stdin.destroy(); } catch (_) {}
-      ffmpegProcess.kill('SIGKILL');
-    });
+      ffmpegProcess.on('close', (code: any) => {
+        this.logger.log(`FFmpeg exited (code ${code}).`);
+        if (!res.writableEnded) res.end();
+      });
+
+      // Non-blocking: runs in background until client disconnects
+      this.pipeSegmentsInfinitely(streamUrl, streamHeaders, stitcher, () => clientDisconnected)
+        .catch(e => {
+          this.logger.error(`[SegmentStitcher] Transcode loop crashed: ${e.message}`);
+          try { ffmpegProcess.kill('SIGKILL'); } catch (_) {}
+        });
+
+    } else {
+      // ── VOD: single-pass ───────────────────────────────────────────────────
+      vodResponse.data.pipe(ffmpegProcess.stdin);
+
+      ffmpegProcess.on('close', (code: any) => {
+        this.logger.log(`FFmpeg VOD exited (code ${code}).`);
+        if (!res.writableEnded) res.end();
+      });
+
+      vodResponse.data.on('end', () => { try { ffmpegProcess.stdin.end(); } catch (_) {} });
+      vodResponse.data.on('error', (err: any) => {
+        this.logger.error(`Axios VOD stream error: ${err.message}`);
+        try { ffmpegProcess.stdin.end(); } catch (_) {}
+      });
+
+      res.on('close', () => {
+        this.logger.log('VOD client disconnected — killing FFmpeg.');
+        try { vodResponse.data.destroy(); } catch (_) {}
+        try { ffmpegProcess.stdin.destroy(); } catch (_) {}
+        ffmpegProcess.kill('SIGKILL');
+      });
+    }
+  }
+
+  /**
+   * Segment stitcher — the heart of seamless live streaming.
+   *
+   * Continuously GETs the IPTV provider URL (which returns finite ~33s TS chunks)
+   * and writes each chunk into `sink` WITHOUT ever closing it.  From the consumer's
+   * perspective (mpegts.js / FFmpeg) this looks like one infinite HTTP stream:
+   *   duration = Infinity, no EOF, no reload, no audio gap.
+   *
+   * Stops only when:
+   *   • isClientDisconnected() returns true  (user navigated away)
+   *   • 10 consecutive errors                (provider is down)
+   *   • sink is destroyed externally
+   */
+  private async pipeSegmentsInfinitely(
+    streamUrl: string,
+    requestHeaders: Record<string, string>,
+    sink: PassThrough,
+    isClientDisconnected: () => boolean,
+  ): Promise<void> {
+    let consecutiveErrors = 0;
+
+    while (!isClientDisconnected() && !sink.writableEnded && !sink.destroyed) {
+      try {
+        const response = await firstValueFrom(
+          this.httpService.get(streamUrl, {
+            responseType: 'stream',
+            decompress: false,
+            headers: requestHeaders,
+          }).pipe(catchError(err => { throw err; }))
+        );
+
+        consecutiveErrors = 0; // successful connection → reset error counter
+
+        await new Promise<void>((resolve, reject) => {
+          // Guard: if the client already left during the Axios request, bail out
+          if (isClientDisconnected() || sink.writableEnded || sink.destroyed) {
+            try { response.data.destroy(); } catch (_) {}
+            resolve();
+            return;
+          }
+
+          const onData = (chunk: Buffer) => {
+            if (!sink.writableEnded && !sink.destroyed) sink.write(chunk);
+          };
+          const onEnd = () => {
+            response.data.removeAllListeners();
+            this.logger.log('[SegmentStitcher] Segment ended — immediately fetching next');
+            resolve();
+          };
+          const onError = (err: any) => {
+            response.data.removeAllListeners();
+            reject(err);
+          };
+
+          response.data.on('data', onData);
+          response.data.on('end', onEnd);
+          response.data.on('error', onError);
+        });
+
+        // 50 ms breathing room before the next request (avoids thundering-herd)
+        if (!isClientDisconnected()) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+
+      } catch (err: any) {
+        consecutiveErrors++;
+        const delay = Math.min(500 * consecutiveErrors, 5000);
+        this.logger.warn(
+          `[SegmentStitcher] Segment error #${consecutiveErrors}: ${err.message}. ` +
+          `Retry in ${delay}ms`
+        );
+        if (consecutiveErrors >= 10) {
+          this.logger.error('[SegmentStitcher] Too many consecutive errors — stopping loop');
+          break;
+        }
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+
+    if (!sink.writableEnded && !sink.destroyed) sink.end();
+    this.logger.log('[SegmentStitcher] Loop stopped');
   }
 
   private isDolbyName(name?: string): boolean {
@@ -280,59 +395,50 @@ export class StreamService {
     const forceTranscode = transcode === 'audio' || transcode === 'video';
     const transcodeType = transcode === 'video' ? 'VIDEO' : 'AUDIO';
 
-    // If client explicitly requested transcoding (detected unsupported codec client-side)
+    // If client explicitly requested transcoding (detected unsupported codec client-side).
+    // isLive=true → segment stitcher keeps FFmpeg stdin open forever.
     if (forceTranscode) {
-      return this.handleTranscodeStream(streamUrl, transcodeType as any, res);
+      return this.handleTranscodeStream(streamUrl, transcodeType as any, res, undefined, undefined, true);
     }
 
-    // If a specific audio track is requested, transcode so the browser can decode the selected audio track (AAC)
+    // If a specific audio track is requested, transcode with stitcher (live).
     if (audioTrack !== undefined) {
       const type = (profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO';
-      return this.handleTranscodeStream(streamUrl, type as any, res, audioTrack);
+      return this.handleTranscodeStream(streamUrl, type as any, res, audioTrack, undefined, true);
     }
 
     // If profile (from background ffprobe cache) confirms transcoding is needed
     if (profile && profile.transcodingRequired && profile.transcodeType) {
-      return this.handleTranscodeStream(streamUrl, profile.transcodeType as any, res);
+      return this.handleTranscodeStream(streamUrl, profile.transcodeType as any, res, undefined, undefined, true);
     }
 
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get(streamUrl, {
-          responseType: 'stream',
-          decompress: false,
-          headers: {
-            // Spoof headers to bypass basic provider blocks
-            'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
-            'Accept': '*/*',
-            'Accept-Encoding': 'identity',
-          }
-        }).pipe(
-          catchError((error) => {
-            this.logger.error(`Error connecting to provider: ${error.message}`);
-            throw new HttpException('Provider Stream Offline', HttpStatus.BAD_GATEWAY);
-          }),
-        ),
-      );
+    // ── DIRECT PROXY: segment stitcher ────────────────────────────────────────
+    // Instead of piping a single 33-second response and letting it close, we
+    // keep the client HTTP response open and continuously fetch the next segment,
+    // writing each one in with end:false.  The browser never sees EOF so
+    // mpegts.js sets duration = Infinity and shows a proper LIVE stream.
+    res.set({
+      'Content-Type': 'video/mp2t',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'Access-Control-Allow-Origin': '*',
+    });
 
-      // Copy essential headers
-      res.set({
-        'Content-Type': response.headers['content-type'] || 'video/mp2t',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-        'Access-Control-Allow-Origin': '*',
-      });
+    const stitcher = new PassThrough();
+    let clientDisconnected = false;
+    res.on('close', () => { clientDisconnected = true; });
+    stitcher.pipe(res);
 
-      // Pipe the external stream directly to our client response
-      response.data.pipe(res);
-
-    } catch (error) {
-      this.logger.error(`Stream proxy failed: ${error.message}`);
-      if (!res.headersSent) {
-        res.status(502).send('Stream Unavailable');
-      }
-    }
+    this.pipeSegmentsInfinitely(
+      streamUrl,
+      { 'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16', 'Accept': '*/*', 'Accept-Encoding': 'identity' },
+      stitcher,
+      () => clientDisconnected,
+    ).catch(e => {
+      this.logger.error(`[SegmentStitcher] Direct proxy error: ${e.message}`);
+      if (!res.writableEnded) res.end();
+    });
   }
 
   async getLiveStreamInfo(channelId: string, userId: string) {
