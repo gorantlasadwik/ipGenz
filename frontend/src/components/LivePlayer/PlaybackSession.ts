@@ -69,8 +69,11 @@ export class PlaybackSession {
         enableStashBuffer: true,
         // Larger stash → fills buffer faster on first load
         stashInitialSize: 1024,
+        // Disable download throttling to allow accumulating a deep buffer
+        lazyLoad: false,
         // Never chase the live edge — buffer stability matters more
         liveBufferLatencyChasing: false,
+        liveSync: false,
       }
     )
 
