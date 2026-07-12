@@ -34,7 +34,12 @@ export class StreamService {
       response = await firstValueFrom(
         this.httpService.get(streamUrl, {
           responseType: 'stream',
-          headers: { 'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16', 'Accept': '*/*' },
+          decompress: false,
+          headers: { 
+            'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16', 
+            'Accept': '*/*',
+            'Accept-Encoding': 'identity'
+          },
         }).pipe(
           catchError(err => { throw new HttpException('Provider Stream Offline', HttpStatus.BAD_GATEWAY); })
         )
@@ -260,10 +265,12 @@ export class StreamService {
       const response = await firstValueFrom(
         this.httpService.get(streamUrl, {
           responseType: 'stream',
+          decompress: false,
           headers: {
             // Spoof headers to bypass basic provider blocks
             'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
             'Accept': '*/*',
+            'Accept-Encoding': 'identity',
           }
         }).pipe(
           catchError((error) => {
@@ -362,6 +369,7 @@ export class StreamService {
       const headers: any = {
         'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
         'Accept': '*/*',
+        'Accept-Encoding': 'identity',
       };
       if (req.headers.range) {
         headers['Range'] = req.headers.range;
@@ -370,6 +378,7 @@ export class StreamService {
       const response = await firstValueFrom(
         this.httpService.get(movie.streamUrl, {
           responseType: 'stream',
+          decompress: false,
           headers,
           validateStatus: status => status < 400 || status === 403 || status === 404,
         })
@@ -452,6 +461,7 @@ export class StreamService {
       const headers: any = {
         'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
         'Accept': '*/*',
+        'Accept-Encoding': 'identity',
       };
       if (req.headers.range) {
         headers['Range'] = req.headers.range;
@@ -460,6 +470,7 @@ export class StreamService {
       const response = await firstValueFrom(
         this.httpService.get(episode.streamUrl, {
           responseType: 'stream',
+          decompress: false,
           headers,
           validateStatus: status => status < 400 || status === 403 || status === 404,
         })
@@ -581,8 +592,10 @@ export class StreamService {
       const response = await firstValueFrom(
         this.httpService.get(movie.streamUrl, {
           responseType: 'stream',
+          decompress: false,
           headers: {
             'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
+            'Accept-Encoding': 'identity',
           }
         })
       );
@@ -609,8 +622,10 @@ export class StreamService {
       const response = await firstValueFrom(
         this.httpService.get(episode.streamUrl, {
           responseType: 'stream',
+          decompress: false,
           headers: {
             'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
+            'Accept-Encoding': 'identity',
           }
         })
       );
