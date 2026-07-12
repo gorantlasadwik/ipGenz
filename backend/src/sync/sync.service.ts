@@ -73,13 +73,104 @@ export class SyncService {
     };
 
     try {
-      // Fetch data from adapter sequentially to avoid overloading low-end IPTV servers with concurrent requests
-      const liveCategories = await adapter.getLiveCategories();
-      const liveChannelsData = await adapter.getLiveChannels();
-      const movieCategories = await adapter.getMovieCategories();
-      const moviesData = await adapter.getMovies();
-      const seriesCategories = await adapter.getSeriesCategories();
-      const seriesListData = await adapter.getSeries();
+      let liveCategories: any[] = [];
+      let liveChannelsData: any[] = [];
+      let movieCategories: any[] = [];
+      let moviesData: any[] = [];
+      let seriesCategories: any[] = [];
+      let seriesListData: any[] = [];
+
+      const targetProvider = await this.prisma.provider.findUnique({
+        where: { id: providerId }
+      });
+
+      let cachedProvider: any = null;
+      if (targetProvider) {
+        if (targetProvider.providerType === 'XTREAM') {
+          cachedProvider = await this.prisma.provider.findFirst({
+            where: {
+              NOT: { id: providerId },
+              providerType: 'XTREAM',
+              serverUrl: targetProvider.serverUrl,
+              username: targetProvider.username,
+              status: 'ACTIVE',
+              lastSyncAt: { not: null }
+            }
+          });
+        } else if (targetProvider.providerType === 'M3U') {
+          cachedProvider = await this.prisma.provider.findFirst({
+            where: {
+              NOT: { id: providerId },
+              providerType: 'M3U',
+              playlistUrl: targetProvider.playlistUrl,
+              status: 'ACTIVE',
+              lastSyncAt: { not: null }
+            }
+          });
+        }
+      }
+
+      if (cachedProvider) {
+        this.logger.log(`Found active database cache for provider. Copying from provider ID: ${cachedProvider.id}`);
+        progress.message = 'Loading data from database cache to save network calls...';
+        this.syncProgressMap.set(providerId, { ...progress });
+
+        const [
+          dbLiveCats,
+          dbLiveChans,
+          dbMovieCats,
+          dbMovies,
+          dbSeriesCats,
+          dbSeries
+        ] = await Promise.all([
+          this.prisma.liveCategory.findMany({ where: { providerId: cachedProvider.id } }),
+          this.prisma.liveChannel.findMany({ where: { providerId: cachedProvider.id }, include: { category: true } }),
+          this.prisma.movieCategory.findMany({ where: { providerId: cachedProvider.id } }),
+          this.prisma.movie.findMany({ where: { providerId: cachedProvider.id }, include: { category: true } }),
+          this.prisma.seriesCategory.findMany({ where: { providerId: cachedProvider.id } }),
+          this.prisma.series.findMany({ where: { providerId: cachedProvider.id }, include: { category: true } })
+        ]);
+
+        liveCategories = dbLiveCats.map((c: any) => ({ providerCategoryId: c.providerCategoryId, name: c.name }));
+        liveChannelsData = dbLiveChans.map((ch: any) => ({
+          providerCategoryId: ch.category?.providerCategoryId || '',
+          providerStreamId: ch.providerStreamId,
+          name: ch.name,
+          logo: ch.logo,
+          streamUrl: ch.streamUrl
+        }));
+        movieCategories = dbMovieCats.map((c: any) => ({ providerCategoryId: c.providerCategoryId, name: c.name }));
+        moviesData = dbMovies.map((m: any) => ({
+          providerCategoryId: m.category?.providerCategoryId || '',
+          providerStreamId: m.providerStreamId,
+          name: m.name,
+          poster: m.poster,
+          backdrop: m.backdrop,
+          description: m.description,
+          year: m.year,
+          rating: m.rating,
+          duration: m.duration,
+          streamUrl: m.streamUrl
+        }));
+        seriesCategories = dbSeriesCats.map((c: any) => ({ providerCategoryId: c.providerCategoryId, name: c.name }));
+        seriesListData = dbSeries.map((s: any) => ({
+          providerCategoryId: s.category?.providerCategoryId || '',
+          providerSeriesId: s.providerSeriesId,
+          name: s.name,
+          poster: s.poster,
+          backdrop: s.backdrop,
+          description: s.description,
+          year: s.year
+        }));
+      } else {
+        // Fetch data from adapter sequentially to avoid overloading low-end IPTV servers with concurrent requests
+        liveCategories = await adapter.getLiveCategories();
+        liveChannelsData = await adapter.getLiveChannels();
+        movieCategories = await adapter.getMovieCategories();
+        moviesData = await adapter.getMovies();
+        seriesCategories = await adapter.getSeriesCategories();
+        seriesListData = await adapter.getSeries();
+      }
 
       let liveChannels = liveChannelsData;
       let movies = moviesData;

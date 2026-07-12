@@ -341,16 +341,21 @@ export default function PremiumAdminPage() {
                 </div>
               )}
 
-              {isSyncing && syncProgress && (
+               {isSyncing && syncProgress && (
                 <div className="p-4 bg-black/50 rounded-xl border border-white/10 animate-in fade-in duration-200 w-full">
                   <div className="flex justify-between text-xs font-semibold mb-2 text-zinc-400">
                     <span>{syncProgress.step}</span>
-                    <span>{syncProgress.processedItems} / {syncProgress.totalItems || '?'}</span>
+                    <span>
+                      {syncProgress.step === 'Syncing Live Channels' && `Channels imported: ${syncProgress.processedItems} / ${syncProgress.totalItems}`}
+                      {syncProgress.step === 'Syncing Movies' && `Movies imported: ${syncProgress.processedItems} / ${syncProgress.totalItems}`}
+                      {syncProgress.step === 'Syncing TV Series' && `Series imported: ${syncProgress.processedItems} / ${syncProgress.totalItems}`}
+                      {syncProgress.step !== 'Syncing Live Channels' && syncProgress.step !== 'Syncing Movies' && syncProgress.step !== 'Syncing TV Series' && `Items imported: ${syncProgress.processedItems} / ${syncProgress.totalItems}`}
+                    </span>
                   </div>
                   <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden mb-2">
                     <div 
-                      className="bg-primary h-full transition-all duration-500"
-                      style={{ width: `${Math.min(100, ((syncProgress.processedItems || 0) / (syncProgress.totalItems || 1)) * 100)}%` }}
+                      className="bg-primary h-full transition-all duration-300 ease-out"
+                      style={{ width: `${Math.min(100, (((syncProgress.processedItems || 0) / (syncProgress.totalItems || 1)) * 100))}%` }}
                     />
                   </div>
                   <p className="text-zinc-500 text-[11px] italic">{syncProgress.message}</p>
