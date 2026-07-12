@@ -32,8 +32,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   const [clientDetectedTranscodeNeeded, setClientDetectedTranscodeNeeded] = useState(false)
   // Show a button overlay when autoplay is blocked by the browser policy
   const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false)
+  // iOS Safari: no MSE support → mpegts.js can't load; we fall back to native video element
+  const [isIOS, setIsIOS] = useState(false)
+  // Controls whether the settings panel is pinned open (for touch devices that have no hover)
+  const [settingsPinned, setSettingsPinned] = useState(false)
   // Use a ref so we can read the latest value inside selectAudioTrack without triggering re-renders
   const isTranscodingRequiredRef = useRef(false)
+
+  // Detect iOS on mount (iOS Safari doesn't support MSE, so mpegts.js can't run)
+  useEffect(() => {
+    const ua = navigator.userAgent || ''
+    const ios = /iPad|iPhone|iPod/.test(ua) && !('MSStream' in window)
+    setIsIOS(ios)
+  }, [])
 
   // Compute isMpegTs synchronously during render
   const firstSource = options.sources?.[0]
@@ -409,6 +420,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
           console.error("Error disposing videojs:", e)
         }
         playerRef.current = null
+      }
+
+      // Dynamically import mpegts.js on client side to avoid SSR errors
+      if (isIOS) {
+        // ── iOS Safari fallback ────────────────────────────────────────────
+        // MSE is not supported on iOS, so mpegts.js cannot be used.
+        // Point the native <video> element directly at the backend stream URL.
+        // iOS may play raw MPEG-TS natively via its QuickTime engine.
+        if (videoRef.current) {
+          videoRef.current.src = sourceUrl
+          videoRef.current.load()
+          if (options.autoplay) {
+            videoRef.current.play().catch((err: any) => {
+              if (err?.name === 'NotAllowedError') setIsAutoplayBlocked(true)
+            })
+          }
+        }
+        return
       }
 
       import('mpegts.js').then((mpegtsModule) => {
@@ -824,10 +853,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
         </div>
       )}
 
-      {/* Premium Floating Controls Overlay */}
-      <div ref={settingsRef} className={`absolute top-4 right-4 z-30 transition-opacity duration-300 ${showSettings ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+      {/* Premium Floating Controls Overlay — always visible on touch, hover on desktop */}
+      <div ref={settingsRef} className={`absolute top-3 right-3 z-30 transition-opacity duration-300 ${showSettings || settingsPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100'}`}>
         <button
-          onClick={() => setShowSettings(!showSettings)}
+          onClick={() => { setShowSettings(!showSettings); setSettingsPinned(!settingsPinned) }}
           className="p-2 bg-black/60 hover:bg-red-600 border border-white/10 hover:border-red-500 rounded-xl text-white transition-all shadow-lg backdrop-blur-md focus:outline-none"
           title="Playback Settings"
         >
