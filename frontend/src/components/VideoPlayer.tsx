@@ -406,12 +406,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
       // Dynamically import mpegts.js on client side to avoid SSR errors
       import('mpegts.js').then((mpegtsModule) => {
         const mpegts = mpegtsModule.default
-        // Cache module ref so button handlers can use it synchronously (within user gesture)
         mpegtsRef.current = mpegts
-
         if (videoRef.current && mpegts.getFeatureList().mseLivePlayback) {
+          let hadPreviousPlayer = false
           // Clean up previous mpegts player
           if (mpegtsPlayerRef.current) {
+            hadPreviousPlayer = true
             try {
               mpegtsPlayerRef.current.unload()
               mpegtsPlayerRef.current.detachMediaElement()
@@ -423,8 +423,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             resetVideoElement()
           }
 
-          const sourceUrlToPlay = sourceUrl
-          if (sourceUrlToPlay) {
+          const initPlayer = () => {
+            const sourceUrlToPlay = sourceUrl
+            if (!sourceUrlToPlay || !videoRef.current) return
+
             const mpegtsPlayer = mpegts.createPlayer({
               type: 'mpegts',
               isLive: true,
@@ -473,7 +475,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
               }
             })
 
-
             mpegtsPlayer.load()
 
             // Trigger fallback check for audio streams in 2 seconds
@@ -492,6 +493,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
                 })
               }
             }
+          }
+
+          if (hadPreviousPlayer) {
+            // Wait 800ms before starting the new connection to let the old connection fully close on the IPTV server
+            timeoutId = setTimeout(initPlayer, 800)
+          } else {
+            initPlayer()
           }
         }
       }).catch((err) => {
