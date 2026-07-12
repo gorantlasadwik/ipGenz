@@ -85,28 +85,6 @@ export class SyncService {
       let movies = moviesData;
       let seriesList = seriesListData;
 
-      // Safety Caps raised to support full playlist syncing on Aiven
-      const MAX_CHANNELS = 100000;
-      const MAX_MOVIES = 100000;
-      const MAX_SERIES = 50000;
-
-      let truncatedChannels = false;
-      let truncatedMovies = false;
-      let truncatedSeries = false;
-
-      if (liveChannels.length > MAX_CHANNELS) {
-        liveChannels = liveChannels.slice(0, MAX_CHANNELS);
-        truncatedChannels = true;
-      }
-      if (movies.length > MAX_MOVIES) {
-        movies = movies.slice(0, MAX_MOVIES);
-        truncatedMovies = true;
-      }
-      if (seriesList.length > MAX_SERIES) {
-        seriesList = seriesList.slice(0, MAX_SERIES);
-        truncatedSeries = true;
-      }
-
       const totalRealItems = liveChannels.length + movies.length + seriesList.length;
 
       if (totalRealItems === 0) {
@@ -115,9 +93,7 @@ export class SyncService {
       }
 
       this.logger.log(
-        `Ingesting playlist content: ${liveChannels.length} Channels${truncatedChannels ? ' (truncated)' : ''}, ` +
-        `${movies.length} Movies${truncatedMovies ? ' (truncated)' : ''}, ` +
-        `${seriesList.length} Series${truncatedSeries ? ' (truncated)' : ''}.`
+        `Ingesting playlist content: ${liveChannels.length} Channels, ${movies.length} Movies, ${seriesList.length} Series.`
       );
 
       // 0. Clear old cache to prevent duplicates and stale content
