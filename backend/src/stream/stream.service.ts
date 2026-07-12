@@ -196,8 +196,20 @@ export class StreamService {
     });
   }
 
-  async proxyLiveStream(channelId: string, audioTrack: number | undefined, userId: string, res: Response) {
-    this.logger.log(`Proxying Live Stream for channel: ${channelId}, audioTrack: ${audioTrack}`);
+  private isDolbyName(name?: string): boolean {
+    if (!name) return false;
+    const lower = name.toLowerCase();
+    return lower.includes('dolby') || 
+           lower.includes('ac3') || 
+           lower.includes('eac3') || 
+           lower.includes('5.1') || 
+           lower.includes('dd5') || 
+           lower.includes('dd+') || 
+           lower.includes('surround');
+  }
+
+  async proxyLiveStream(channelId: string, audioTrack: number | undefined, userId: string, res: Response, transcode?: string) {
+    this.logger.log(`Proxying Live Stream for channel: ${channelId}, audioTrack: ${audioTrack}, Transcode: ${transcode}`);
 
     // Look up the real stream URL from the database and verify ownership
     const channel = await this.prisma.liveChannel.findFirst({
@@ -227,17 +239,21 @@ export class StreamService {
       }
     }
 
+    const forceTranscode = transcode === 'audio' || transcode === 'video';
+    const transcodeType = transcode === 'video' ? 'VIDEO' : 'AUDIO';
+    const isDolby = channel && this.isDolbyName(channel.name);
+
+    if (forceTranscode || (profile && profile.transcodingRequired && profile.transcodeType) || isDolby) {
+      const type = forceTranscode ? transcodeType : ((profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO');
+      return this.handleTranscodeStream(streamUrl, type as any, res);
+    }
+
     // If a specific audio track is requested, use the Node.js PID filter instead of FFmpeg.
     // FFmpeg gets blocked by IPTV providers on cloud datacenters (Render), but the Node.js
     // HTTP proxy works fine. The PID filter reads 188-byte TS packets and drops all audio
     // PIDs except the requested one — no FFmpeg needed!
     if (audioTrack !== undefined) {
       return this.handlePidFilterStream(streamUrl, audioTrack, res);
-    }
-
-    // If the channel profile specifies that transcoding is already required for video or audio, we transcode.
-    if (profile && profile.transcodingRequired && profile.transcodeType) {
-      return this.handleTranscodeStream(streamUrl, profile.transcodeType as any, res);
     }
 
     try {
@@ -304,8 +320,8 @@ export class StreamService {
     }
   }
 
-  async proxyMovieStream(req: any, movieId: string, userId: string, res: Response, audioTrack?: number, start?: number) {
-    this.logger.log(`Proxying Movie Stream: ${movieId}, AudioTrack: ${audioTrack}, Start: ${start}`);
+  async proxyMovieStream(req: any, movieId: string, userId: string, res: Response, audioTrack?: number, start?: number, transcode?: string) {
+    this.logger.log(`Proxying Movie Stream: ${movieId}, AudioTrack: ${audioTrack}, Start: ${start}, Transcode: ${transcode}`);
 
     const movie = await this.prisma.movie.findFirst({
       where: { id: movieId, provider: { userId } },
@@ -328,15 +344,15 @@ export class StreamService {
       this.logger.error(`Failed to retrieve/analyze stream profile: ${err.message}`);
     }
 
+    const forceTranscode = transcode === 'audio' || transcode === 'video';
+    const transcodeType = transcode === 'video' ? 'VIDEO' : 'AUDIO';
+    const isDolby = this.isDolbyName(movie.name);
+
     // Direct playback vs transcoding logic
     // If a specific audio track or start time is requested, we MUST transcode/remux using FFmpeg.
-    if (audioTrack !== undefined || start !== undefined) {
-      const type = (profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO';
+    if (audioTrack !== undefined || start !== undefined || forceTranscode || (profile && profile.transcodingRequired && profile.transcodeType) || isDolby) {
+      const type = forceTranscode ? transcodeType : ((profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO');
       return this.handleTranscodeStream(movie.streamUrl, type, res, audioTrack, start);
-    }
-
-    if (profile && profile.transcodingRequired && profile.transcodeType) {
-      return this.handleTranscodeStream(movie.streamUrl, profile.transcodeType as any, res);
     }
 
     // Proxy the stream directly while supporting Range requests
@@ -391,8 +407,8 @@ export class StreamService {
     }
   }
 
-  async proxyEpisodeStream(req: any, episodeId: string, userId: string, res: Response, audioTrack?: number, start?: number) {
-    this.logger.log(`Proxying Episode Stream: ${episodeId}, AudioTrack: ${audioTrack}, Start: ${start}`);
+  async proxyEpisodeStream(req: any, episodeId: string, userId: string, res: Response, audioTrack?: number, start?: number, transcode?: string) {
+    this.logger.log(`Proxying Episode Stream: ${episodeId}, AudioTrack: ${audioTrack}, Start: ${start}, Transcode: ${transcode}`);
 
     const episode = await this.prisma.episode.findFirst({
       where: { id: episodeId, season: { series: { provider: { userId } } } },
@@ -418,15 +434,15 @@ export class StreamService {
       }
     }
 
+    const forceTranscode = transcode === 'audio' || transcode === 'video';
+    const transcodeType = transcode === 'video' ? 'VIDEO' : 'AUDIO';
+    const isDolby = this.isDolbyName(episode.title || undefined) || (episode.season?.series && this.isDolbyName(episode.season.series.name));
+
     // Direct playback vs transcoding logic
     // If a specific audio track or start time is requested, we MUST transcode/remux using FFmpeg.
-    if (audioTrack !== undefined || start !== undefined) {
-      const type = (profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO';
+    if (audioTrack !== undefined || start !== undefined || forceTranscode || (profile && profile.transcodingRequired && profile.transcodeType) || isDolby) {
+      const type = forceTranscode ? transcodeType : ((profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO');
       return this.handleTranscodeStream(episode.streamUrl, type, res, audioTrack, start);
-    }
-
-    if (profile && profile.transcodingRequired && profile.transcodeType) {
-      return this.handleTranscodeStream(episode.streamUrl, profile.transcodeType as any, res);
     }
 
     // Proxy the stream directly while supporting Range requests

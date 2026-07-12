@@ -15,10 +15,11 @@ export class StreamController {
     @Param('channelId') channelId: string,
     @Res() res: Response,
     @Query('audioTrack') audioTrack?: string,
+    @Query('transcode') transcode?: string,
   ) {
     const trackNum = audioTrack !== undefined && audioTrack !== '' ? parseInt(audioTrack, 10) : undefined;
     const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
-    return this.streamService.proxyLiveStream(channelId, trackNum, targetUserId, res);
+    return this.streamService.proxyLiveStream(channelId, trackNum, targetUserId, res, transcode);
   }
 
   @Get('live/:channelId/info')
@@ -34,11 +35,12 @@ export class StreamController {
     @Res() res: Response,
     @Query('audioTrack') audioTrack?: string,
     @Query('start') start?: string,
+    @Query('transcode') transcode?: string,
   ) {
     const trackNum = audioTrack !== undefined && audioTrack !== '' ? parseInt(audioTrack, 10) : undefined;
     const startNum = start !== undefined && start !== '' ? parseFloat(start) : undefined;
     const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
-    return this.streamService.proxyMovieStream(req, movieId, targetUserId, res, trackNum, startNum);
+    return this.streamService.proxyMovieStream(req, movieId, targetUserId, res, trackNum, startNum, transcode);
   }
 
   @Get('movie/:movieId/info')
@@ -54,11 +56,12 @@ export class StreamController {
     @Res() res: Response,
     @Query('audioTrack') audioTrack?: string,
     @Query('start') start?: string,
+    @Query('transcode') transcode?: string,
   ) {
     const trackNum = audioTrack !== undefined && audioTrack !== '' ? parseInt(audioTrack, 10) : undefined;
     const startNum = start !== undefined && start !== '' ? parseFloat(start) : undefined;
     const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
-    return this.streamService.proxyEpisodeStream(req, episodeId, targetUserId, res, trackNum, startNum);
+    return this.streamService.proxyEpisodeStream(req, episodeId, targetUserId, res, trackNum, startNum, transcode);
   }
 
   @Get('episode/:episodeId/info')
