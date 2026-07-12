@@ -451,7 +451,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     }
 
     args.push('-debug_ts');
-    args.push('-fflags', '+genpts+discardcorrupt+igndts');
+    args.push('-fflags', '+genpts+discardcorrupt+igndts+nobuffer');
     args.push('-i', 'pipe:0');
 
     if (audioTrack !== undefined) {
@@ -475,6 +475,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     args.push('-avoid_negative_ts', 'make_zero');
     args.push('-muxdelay', '0');
     args.push('-max_muxing_queue_size', '1024');
+    args.push('-flush_packets', '1');
     args.push('-f', 'mpegts', 'pipe:1');
 
     res.set({
@@ -561,7 +562,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`[FFMPEG_SINGLE_SPAWN][Channel:${channelId}] Spawning single long-lived FFmpeg instance`);
       const args: string[] = [
         '-debug_ts',
-        '-fflags', '+genpts+discardcorrupt+igndts',
+        '-fflags', '+genpts+discardcorrupt+igndts+nobuffer',
         '-i', 'pipe:0',
       ];
       if (audioTrack !== undefined) {
@@ -585,6 +586,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       args.push('-avoid_negative_ts', 'make_zero');
       args.push('-muxdelay', '0');
       args.push('-max_muxing_queue_size', '1024');
+      args.push('-flush_packets', '1');
       args.push('-f', 'mpegts', 'pipe:1');
 
       singleFfmpegProcess = spawn(ffmpegPath, args) as any;
@@ -655,7 +657,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
 
             const args: string[] = [
               '-debug_ts',
-              '-fflags', '+genpts+discardcorrupt+igndts',
+              '-fflags', '+genpts+discardcorrupt+igndts+nobuffer',
               '-i', 'pipe:0',
             ];
             if (audioTrack !== undefined) {
@@ -679,6 +681,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
             args.push('-avoid_negative_ts', 'make_zero');
             args.push('-muxdelay', '0');
             args.push('-max_muxing_queue_size', '1024');
+            args.push('-flush_packets', '1');
             args.push('-output_ts_offset', cumulativeDurationSec.toFixed(3));
             args.push('-f', 'mpegts', 'pipe:1');
 
