@@ -42,12 +42,13 @@ export class AppController {
 
       const args = [
         '-user_agent', 'VLC/3.0.16 LibVLC/3.0.16',
+        '-fflags', '+genpts+discardcorrupt+igndts',
         '-i', channel.streamUrl,
         '-c:v', 'copy',
         '-c:a', 'aac',
         '-b:a', '128k',
         '-ac', '2',
-        '-copyts',
+        '-avoid_negative_ts', 'make_zero',
         '-muxdelay', '0',
         '-max_muxing_queue_size', '1024',
         '-f', 'mpegts',
