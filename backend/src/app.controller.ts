@@ -8,6 +8,8 @@ export class AppController {
   @Get()
   getHello(): string {
     return this.appService.getHello();
+  }
+
   @Get('debug-ffmpeg')
   async debugFfmpeg(@Res() res: any) {
     const { spawn } = require('child_process');
