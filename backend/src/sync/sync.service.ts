@@ -127,19 +127,22 @@ export class SyncService {
         this.prisma.seriesCategory.deleteMany({ where: { providerId } })
       ]);
 
-      // 1. Sync Live Categories
+      // 1. Sync Live Categories in Bulk
       progress.step = 'Syncing Live Categories';
       progress.message = 'Loading live channel categories...';
       progress.totalItems = liveCategories.length;
       progress.processedItems = 0;
       this.syncProgressMap.set(providerId, { ...progress });
 
-      for (const cat of liveCategories) {
-        if (await checkStopped()) return;
-        await this.prisma.liveCategory.upsert({
-          where: { providerId_providerCategoryId: { providerId, providerCategoryId: cat.providerCategoryId } },
-          update: { name: cat.name },
-          create: { providerId, providerCategoryId: cat.providerCategoryId, name: cat.name }
+      const uniqueLiveCats = Array.from(new Map(liveCategories.map(c => [c.providerCategoryId, c])).values());
+      if (uniqueLiveCats.length > 0) {
+        await this.prisma.liveCategory.createMany({
+          data: uniqueLiveCats.map(cat => ({
+            providerId,
+            providerCategoryId: cat.providerCategoryId,
+            name: cat.name
+          })),
+          skipDuplicates: true
         });
       }
 
@@ -179,19 +182,22 @@ export class SyncService {
         this.syncProgressMap.set(providerId, { ...progress });
       }
 
-      // 3. Sync Movie Categories
+      // 3. Sync Movie Categories in Bulk
       progress.step = 'Syncing Movie Categories';
       progress.message = 'Loading movie categories...';
       progress.totalItems = movieCategories.length;
       progress.processedItems = 0;
       this.syncProgressMap.set(providerId, { ...progress });
 
-      for (const cat of movieCategories) {
-        if (await checkStopped()) return;
-        await this.prisma.movieCategory.upsert({
-          where: { providerId_providerCategoryId: { providerId, providerCategoryId: cat.providerCategoryId } },
-          update: { name: cat.name },
-          create: { providerId, providerCategoryId: cat.providerCategoryId, name: cat.name }
+      const uniqueMovieCats = Array.from(new Map(movieCategories.map(c => [c.providerCategoryId, c])).values());
+      if (uniqueMovieCats.length > 0) {
+        await this.prisma.movieCategory.createMany({
+          data: uniqueMovieCats.map(cat => ({
+            providerId,
+            providerCategoryId: cat.providerCategoryId,
+            name: cat.name
+          })),
+          skipDuplicates: true
         });
       }
 
@@ -234,19 +240,22 @@ export class SyncService {
         this.syncProgressMap.set(providerId, { ...progress });
       }
 
-      // 5. Sync Series Categories
+      // 5. Sync Series Categories in Bulk
       progress.step = 'Syncing Series Categories';
       progress.message = 'Loading series categories...';
       progress.totalItems = seriesCategories.length;
       progress.processedItems = 0;
       this.syncProgressMap.set(providerId, { ...progress });
 
-      for (const cat of seriesCategories) {
-        if (await checkStopped()) return;
-        await this.prisma.seriesCategory.upsert({
-          where: { providerId_providerCategoryId: { providerId, providerCategoryId: cat.providerCategoryId } },
-          update: { name: cat.name },
-          create: { providerId, providerCategoryId: cat.providerCategoryId, name: cat.name }
+      const uniqueSeriesCats = Array.from(new Map(seriesCategories.map(c => [c.providerCategoryId, c])).values());
+      if (uniqueSeriesCats.length > 0) {
+        await this.prisma.seriesCategory.createMany({
+          data: uniqueSeriesCats.map(cat => ({
+            providerId,
+            providerCategoryId: cat.providerCategoryId,
+            name: cat.name
+          })),
+          skipDuplicates: true
         });
       }
 
