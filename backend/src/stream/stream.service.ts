@@ -123,13 +123,31 @@ export class StreamService {
     res.on('close', () => { try { response.data.destroy(); } catch (_) {} });
   }
 
-  /**
-   * Spawns an on-the-fly FFmpeg transcoding process to convert unsupported codecs
-   * and pipes the output directly to the HTTP response.
-   */
   async handleTranscodeStream(streamUrl: string, transcodeType: 'AUDIO' | 'VIDEO', res: Response, audioTrack?: number, startTime?: number) {
-
     this.logger.log(`Transcoding stream on-the-fly. Type: ${transcodeType}, URL: ${streamUrl}, AudioTrack: ${audioTrack !== undefined ? audioTrack : 'default'}, Start: ${startTime || 0}`);
+
+    let response: any;
+    try {
+      response = await firstValueFrom(
+        this.httpService.get(streamUrl, {
+          responseType: 'stream',
+          decompress: false,
+          headers: {
+            'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
+            'Accept': '*/*',
+            'Accept-Encoding': 'identity',
+          }
+        }).pipe(
+          catchError(err => {
+            this.logger.error(`Failed to connect to IPTV provider for transcoding: ${err.message}`);
+            throw new HttpException('Provider Stream Offline', HttpStatus.BAD_GATEWAY);
+          })
+        )
+      );
+    } catch (e) {
+      if (!res.headersSent) res.status(502).send('Stream Unavailable');
+      return;
+    }
 
     const ffmpegPath = ffmpegStatic;
     const args: string[] = [];
@@ -138,11 +156,9 @@ export class StreamService {
       args.push('-ss', startTime.toString());
     }
 
-    // Spoof User-Agent BEFORE -i so FFmpeg uses it when connecting to the source
-    args.push('-user_agent', 'VLC/3.0.16 LibVLC/3.0.16');
     // Generate clean monotonic timestamps and drop corrupt packets to handle stream discontinuities without crashing
     args.push('-fflags', '+genpts+discardcorrupt+igndts');
-    args.push('-i', streamUrl);
+    args.push('-i', 'pipe:0'); // read from stdin
 
     if (audioTrack !== undefined) {
       // Map the first video stream and the selected audio stream index
@@ -182,6 +198,10 @@ export class StreamService {
 
     const ffmpegProcess = spawn(ffmpegPath, args) as any;
 
+    // Pipe raw downloaded stream into FFmpeg's stdin
+    response.data.pipe(ffmpegProcess.stdin);
+
+    // Pipe FFmpeg's transcoded output to client response
     ffmpegProcess.stdout.pipe(res);
 
     ffmpegProcess.stderr.on('data', (data: any) => {
@@ -191,10 +211,22 @@ export class StreamService {
 
     ffmpegProcess.on('close', (code: any) => {
       this.logger.log(`FFmpeg transcoding process exited with code ${code}`);
+      if (!res.writableEnded) res.end();
+    });
+
+    response.data.on('end', () => {
+      try { ffmpegProcess.stdin.end(); } catch (_) {}
+    });
+
+    response.data.on('error', (err: any) => {
+      this.logger.error(`Axios stream error during transcode: ${err.message}`);
+      try { ffmpegProcess.stdin.end(); } catch (_) {}
     });
 
     res.on('close', () => {
-      this.logger.log('Client connection closed. Killing FFmpeg process...');
+      this.logger.log('Client connection closed. Killing FFmpeg process and destroying network stream...');
+      try { response.data.destroy(); } catch (_) {}
+      try { ffmpegProcess.stdin.destroy(); } catch (_) {}
       ffmpegProcess.kill('SIGKILL');
     });
   }

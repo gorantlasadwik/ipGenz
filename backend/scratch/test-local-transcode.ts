@@ -1,13 +1,47 @@
+import { PrismaClient } from '@prisma/client';
+import { JwtService } from '@nestjs/jwt';
 import axios from 'axios';
 
-const url = 'http://localhost:3001/debug-ffmpeg?id=261c910c-e29d-443d-ae6d-8238bdd4bc43';
+const prisma = new PrismaClient();
+const jwtService = new JwtService({
+  secret: process.env.JWT_SECRET || '26062006Gk',
+});
 
-async function testLocalTranscode() {
-  console.log('Sending request to local debug-ffmpeg endpoint...');
+async function main() {
+  const user = await prisma.user.findFirst({
+    where: { email: { not: '' } }
+  });
+
+  if (!user) {
+    console.error('No users found');
+    process.exit(1);
+  }
+
+  const channel = await prisma.liveChannel.findUnique({
+    where: { id: '261c910c-e29d-443d-ae6d-8238bdd4bc43' }
+  });
+
+  if (!channel) {
+    console.error('Star Maa channel not found');
+    process.exit(1);
+  }
+
+  const payload = {
+    email: user.email,
+    userId: user.id,
+    isPremiumTrial: user.isPremiumTrial,
+    sessionToken: user.currentStreamSession,
+  };
+  const token = jwtService.sign(payload, { expiresIn: '1h' });
+
+  // Query local backend with ?transcode=audio
+  const url = `http://localhost:3001/stream/live/${channel.id}?token=${token}&transcode=audio`;
+  console.log(`Testing transcoded proxy duration locally (Residential IP): ${url}`);
+
   try {
     const response = await axios.get(url, {
       responseType: 'stream',
-      timeout: 20000 // 20s
+      timeout: 90000 // 90s
     });
 
     console.log(`HTTP Status: ${response.status}`);
@@ -15,32 +49,48 @@ async function testLocalTranscode() {
     let bytesReceived = 0;
     let startTime = Date.now();
 
+    const interval = setInterval(() => {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[${elapsed}s] Transcoded Data: ${(bytesReceived / 1024 / 1024).toFixed(2)} MB`);
+    }, 5000);
+
     stream.on('data', (chunk: Buffer) => {
       bytesReceived += chunk.length;
-      console.log(`[${((Date.now() - startTime) / 1000).toFixed(1)}s] Received chunk: ${chunk.length} bytes (Total: ${(bytesReceived / 1024).toFixed(1)} KB)`);
     });
 
     stream.on('end', () => {
-      console.log(`Stream ended. Total: ${(bytesReceived / 1024).toFixed(1)} KB`);
-      process.exit(0);
-    });
-
-    stream.on('error', (err: any) => {
-      console.error('Stream error:', err.message);
+      clearInterval(interval);
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`Local transcoded stream ended after ${elapsed}s. Total: ${(bytesReceived / 1024 / 1024).toFixed(2)} MB`);
+      prisma.$disconnect();
       process.exit(1);
     });
 
-    // Let it run for 12 seconds to see if it streams continuously
+    stream.on('error', (err: any) => {
+      clearInterval(interval);
+      console.error('Local transcoded stream error:', err.message);
+      prisma.$disconnect();
+      process.exit(1);
+    });
+
+    // Let it run for 60 seconds
     setTimeout(() => {
-      console.log(`\nLocal stream is still active and streaming perfectly after 12s! Total data received: ${(bytesReceived / 1024).toFixed(1)} KB`);
+      clearInterval(interval);
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`Success! Local transcoded stream is still running after ${elapsed}s. Total: ${(bytesReceived / 1024 / 1024).toFixed(2)} MB`);
       stream.destroy();
+      prisma.$disconnect();
       process.exit(0);
-    }, 12000);
+    }, 60000);
 
   } catch (err: any) {
-    console.error('Connection failed:', err.message);
+    console.error('Local connection failed:', err.message);
+    prisma.$disconnect();
     process.exit(1);
   }
 }
 
-testLocalTranscode();
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
