@@ -205,8 +205,11 @@ export class StreamService {
     ffmpegProcess.stdout.pipe(res);
 
     ffmpegProcess.stderr.on('data', (data: any) => {
-      // Verbose logging of FFmpeg progress can be mapped here if needed
-      // this.logger.verbose(`FFmpeg progress: ${data.toString()}`);
+      this.logger.warn(`FFmpeg Stderr: ${data.toString().trim()}`);
+    });
+
+    ffmpegProcess.on('error', (err: any) => {
+      this.logger.error(`FFmpeg process failed to spawn: ${err.message}`);
     });
 
     ffmpegProcess.on('close', (code: any) => {

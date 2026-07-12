@@ -34,9 +34,9 @@ async function main() {
   };
   const token = jwtService.sign(payload, { expiresIn: '1h' });
 
-  // Direct proxy URL
-  const url = `https://ipgenz-backend.onrender.com/stream/live/${channel.id}?token=${token}`;
-  console.log(`Testing direct proxy connection duration on Render: ${url}`);
+  // Transcode proxy URL on Render
+  const url = `https://ipgenz-backend.onrender.com/stream/live/${channel.id}?token=${token}&transcode=audio`;
+  console.log(`Testing production Render transcode connection: ${url}`);
 
   try {
     const response = await axios.get(url, {
@@ -76,7 +76,7 @@ async function main() {
       process.exit(1);
     });
 
-    // Let it run for 60 seconds
+    // Let it run for 40 seconds
     setTimeout(() => {
       clearInterval(interval);
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -84,7 +84,7 @@ async function main() {
       stream.destroy();
       prisma.$disconnect();
       process.exit(0);
-    }, 60000);
+    }, 40000);
 
   } catch (err: any) {
     console.error('Connection failed:', err.message);
