@@ -6,7 +6,7 @@ import type { Response } from 'express';
 import { CodecService } from './codec.service';
 import { ContentType } from '@prisma/client';
 import { spawn } from 'child_process';
-import { PassThrough, Transform } from 'stream';
+import { PassThrough, Transform, Readable } from 'stream';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as http from 'http';
@@ -16,6 +16,51 @@ const keepAliveHttpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 100
 const keepAliveHttpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 1000 });
 
 const ffmpegStatic = require('ffmpeg-static');
+
+class TranscodeCacheStream extends Readable {
+  private queue: Buffer[] = [];
+  private totalBytes = 0;
+  private maxCacheBytes = 10 * 1024 * 1024; // 10MB cache (approx 20 seconds of video)
+  private isDestroyed = false;
+
+  constructor() {
+    super({ highWaterMark: 1024 * 1024 * 5 });
+  }
+
+  writeChunk(chunk: Buffer) {
+    if (this.isDestroyed) return;
+    this.queue.push(chunk);
+    this.totalBytes += chunk.length;
+
+    while (this.totalBytes > this.maxCacheBytes && this.queue.length > 1) {
+      const oldest = this.queue.shift();
+      if (oldest) {
+        this.totalBytes -= oldest.length;
+      }
+    }
+    this.emit('readable');
+  }
+
+  _read(size: number) {
+    while (this.queue.length > 0) {
+      const chunk = this.queue[0];
+      if (this.push(chunk)) {
+        this.queue.shift();
+        this.totalBytes -= chunk.length;
+      } else {
+        break;
+      }
+    }
+  }
+
+  destroy(error?: Error): this {
+    this.isDestroyed = true;
+    this.queue = [];
+    this.totalBytes = 0;
+    super.destroy(error);
+    return this;
+  }
+}
 
 class TsDiagnosticsTransform extends Transform {
   private readonly log = new Logger('TsDiagnostics');
@@ -557,6 +602,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     // For single process (old implementation): spawn the single FFmpeg process here
     let singleFfmpegProcess: any = null;
     let singleStitcher: PassThrough | null = null;
+    let singleCacheStream: TranscodeCacheStream | null = null;
 
     if (transcodeType && !useDynamicRestart) {
       this.logger.log(`[FFMPEG_SINGLE_SPAWN][Channel:${channelId}] Spawning single long-lived FFmpeg instance`);
@@ -592,7 +638,12 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       singleFfmpegProcess = spawn(ffmpegPath, args) as any;
       singleStitcher = new PassThrough();
       singleStitcher.pipe(singleFfmpegProcess.stdin);
-      singleFfmpegProcess.stdout.pipe(sink, { end: false });
+
+      singleCacheStream = new TranscodeCacheStream();
+      singleFfmpegProcess.stdout.on('data', (chunk: Buffer) => {
+        if (singleCacheStream) singleCacheStream.writeChunk(chunk);
+      });
+      singleCacheStream.pipe(sink, { end: false });
 
       singleFfmpegProcess.stderr.on('data', (data: any) => {
         this.logger.warn(`[FFMPEG_SINGLE_STDERR][Channel:${channelId}] ${data.toString().trim()}`);
@@ -720,8 +771,17 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
             outputNode = inputNode;
           }
 
+          let dynamicCacheStream: TranscodeCacheStream | null = null;
           if (outputNode) {
-            outputNode.pipe(tsDiagnostics, { end: false });
+            if (transcodeType && useDynamicRestart) {
+              dynamicCacheStream = new TranscodeCacheStream();
+              outputNode.on('data', (chunk: Buffer) => {
+                if (dynamicCacheStream) dynamicCacheStream.writeChunk(chunk);
+              });
+              dynamicCacheStream.pipe(tsDiagnostics, { end: false });
+            } else {
+              outputNode.pipe(tsDiagnostics, { end: false });
+            }
             tsDiagnostics.pipe(sink, { end: false });
           }
 
@@ -738,6 +798,10 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
             if (heartbeatTimer) {
               clearTimeout(heartbeatTimer);
               heartbeatTimer = null;
+            }
+            if (dynamicCacheStream) {
+              try { dynamicCacheStream.destroy(); } catch (_) {}
+              dynamicCacheStream = null;
             }
             try { response.data.unpipe(); } catch (_) {}
             try { if (tsDiagnostics) tsDiagnostics.unpipe(); } catch (_) {}
@@ -804,6 +868,9 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       try { singleStitcher!.destroy(); } catch (_) {}
       try { singleFfmpegProcess.stdin.destroy(); } catch (_) {}
       try { singleFfmpegProcess.kill('SIGKILL'); } catch (_) {}
+    }
+    if (singleCacheStream) {
+      try { singleCacheStream.destroy(); } catch (_) {}
     }
 
     if (!sink.writableEnded && !sink.destroyed) sink.end();

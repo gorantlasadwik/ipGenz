@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProviderType } from '@prisma/client';
 import { encryptString } from '../utils/crypto.util';
+import { UsersService } from '../users/users.service';
 
 @Controller('providers')
 @UseGuards(JwtAuthGuard)
@@ -47,8 +48,12 @@ export class ProvidersController {
 
   @Get()
   async getProviders(@Request() req: any) {
+    const userId = req.user.isPremiumTrial
+      ? (UsersService.trialMasterUserId || req.user.userId)
+      : req.user.userId;
+
     return this.prisma.provider.findMany({
-      where: { userId: req.user.userId },
+      where: { userId },
       select: {
         id: true,
         providerName: true,
@@ -70,8 +75,12 @@ export class ProvidersController {
 
   @Get(':id')
   async getProvider(@Request() req: any, @Param('id') id: string) {
+    const userId = req.user.isPremiumTrial
+      ? (UsersService.trialMasterUserId || req.user.userId)
+      : req.user.userId;
+
     return this.prisma.provider.findFirst({
-      where: { id, userId: req.user.userId },
+      where: { id, userId },
       select: {
         id: true,
         providerName: true,
