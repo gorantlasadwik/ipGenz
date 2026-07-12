@@ -148,7 +148,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
               let lang = 'und'
               const codecName = streamType === 0x0F || streamType === 0x11 ? 'AAC'
                 : streamType === 0x03 || streamType === 0x04 ? 'MP2'
-                : streamType === 0x81 ? 'AC3' : 'AUDIO'
+                : streamType === 0x81 ? 'AC3'
+                : streamType === 0x87 ? 'EAC3' : 'AC3' // 0x87=E-AC-3, default unknown to AC3 (safer)
               // Scan ES descriptors for ISO 639 language descriptor (tag 0x0A)
               for (let d = k + 5; d < k + 5 + esInfoLen - 1; ) {
                 const descTag = buffer[d], descLen = buffer[d + 1]
@@ -434,13 +435,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
 
             mpegtsPlayer.on(mpegts.Events.ERROR, (type: any, detail: any, info: any) => {
               console.warn("mpegts.js error occurred in VideoPlayer:", type, detail, info)
-              // If we get an MSE error and we haven't already enabled transcoding,
-              // it's likely a codec incompatibility (AC3/EAC3). Auto-retry with transcoding.
-              if (type === 'MSEError' || (detail && detail.toLowerCase?.().includes('codec'))) {
-                if (!sourceUrlToPlay.includes('transcode=audio') && !sourceUrlToPlay.includes('transcode=video')) {
-                  console.log('[VideoPlayer] MSE codec error detected — enabling server-side audio transcoding...')
-                  setClientDetectedTranscodeNeeded(true)
-                }
+              // Correct mpegts.js error types: type='MediaError', detail='MediaMSEError'
+              // This is fired when the browser's MSE cannot decode the codec (e.g. AC3/EAC3)
+              const isMseCodecError = type === 'MediaError' && detail === 'MediaMSEError'
+              if (isMseCodecError && !sourceUrlToPlay.includes('transcode=audio') && !sourceUrlToPlay.includes('transcode=video')) {
+                console.log('[VideoPlayer] AC3/EAC3 codec rejected by MSE — switching to server-side audio transcoding...')
+                setClientDetectedTranscodeNeeded(true)
               }
             })
 
