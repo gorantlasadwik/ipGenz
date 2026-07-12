@@ -396,6 +396,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Generate clean monotonic timestamps; discard corrupt packets & ignore bad DTS
+    args.push('-debug_ts');
     args.push('-fflags', '+genpts+discardcorrupt+igndts');
     args.push('-i', 'pipe:0');
 
@@ -1072,6 +1073,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       const ffmpegPath = process.env.NODE_ENV === 'production' ? 'ffmpeg' : ffmpegStatic;
       
       const args = [
+        '-debug_ts',
         '-fflags', '+genpts+discardcorrupt+igndts',
         '-i', 'pipe:0',
         '-c:v', 'copy',
