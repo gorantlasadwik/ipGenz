@@ -627,7 +627,6 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
 
             const args: string[] = [
               '-debug_ts',
-              '-output_ts_offset', cumulativeDurationSec.toFixed(3),
               '-fflags', '+genpts+discardcorrupt+igndts',
               '-i', 'pipe:0',
             ];
@@ -644,6 +643,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
             args.push('-avoid_negative_ts', 'make_zero');
             args.push('-muxdelay', '0');
             args.push('-max_muxing_queue_size', '1024');
+            args.push('-output_ts_offset', cumulativeDurationSec.toFixed(3));
             args.push('-f', 'mpegts', 'pipe:1');
 
             ffmpegProcess = spawn(ffmpegPath, args) as any;
