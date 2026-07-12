@@ -73,22 +73,13 @@ export class SyncService {
     };
 
     try {
-      // Fetch data from adapter in parallel to speed up downloads
-      const [
-        liveCategories,
-        liveChannelsData,
-        movieCategories,
-        moviesData,
-        seriesCategories,
-        seriesListData
-      ] = await Promise.all([
-        adapter.getLiveCategories(),
-        adapter.getLiveChannels(),
-        adapter.getMovieCategories(),
-        adapter.getMovies(),
-        adapter.getSeriesCategories(),
-        adapter.getSeries()
-      ]);
+      // Fetch data from adapter sequentially to avoid overloading low-end IPTV servers with concurrent requests
+      const liveCategories = await adapter.getLiveCategories();
+      const liveChannelsData = await adapter.getLiveChannels();
+      const movieCategories = await adapter.getMovieCategories();
+      const moviesData = await adapter.getMovies();
+      const seriesCategories = await adapter.getSeriesCategories();
+      const seriesListData = await adapter.getSeries();
 
       let liveChannels = liveChannelsData;
       let movies = moviesData;

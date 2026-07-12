@@ -27,7 +27,13 @@ export class XtreamAdapter implements ProviderAdapter {
     const encodedPassword = encodeURIComponent(this.password || '');
     const url = `${this.baseUrl}/player_api.php?username=${encodedUsername}&password=${encodedPassword}&action=${action}`;
     try {
-      const res = await axios.get(url, { timeout: 15000 });
+      const res = await axios.get(url, { 
+        timeout: 25000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*'
+        }
+      });
       return res.data;
     } catch (err) {
       console.error(`Error connecting to Xtream Codes server for action=${action}:`, err.message);
