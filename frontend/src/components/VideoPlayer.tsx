@@ -77,6 +77,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
 
   // Smart URL builder: auto-adds ?transcode=audio when client detects unsupported codec
   const buildSourceUrl = (): string => {
+    let base = rawSourceUrl
+    if (isIOS && base.includes('/stream/live/')) {
+      // Replace /stream/live/{channelId} with /stream/live/{channelId}/playlist.m3u8
+      base = base.replace(/\/stream\/live\/([^\/?#]+)/, '/stream/live/$1/playlist.m3u8')
+    }
     const params: string[] = []
     // If client-side PMT parsing detected an unsupported codec, request server transcoding
     if (clientDetectedTranscodeNeeded && selectedAudioTrackId === null) {
@@ -86,13 +91,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
     if (selectedAudioTrackId !== null || isTranscodingRequired) {
       params.push(`audioTrack=${selectedAudioTrackId ?? 0}`)
     }
-    if (params.length === 0) return rawSourceUrl
-    return `${rawSourceUrl}${rawSourceUrl.includes('?') ? '&' : '?'}${params.join('&')}`
+    if (params.length === 0) return base
+    return `${base}${base.includes('?') ? '&' : '?'}${params.join('&')}`
   }
 
   const sourceUrl = buildSourceUrl()
   const sourceType = firstSource?.type || ''
-  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || isTranscodingRequired || clientDetectedTranscodeNeeded || selectedAudioTrackId !== null
+  const isMpegTs = !isIOS && (sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || isTranscodingRequired || clientDetectedTranscodeNeeded || selectedAudioTrackId !== null)
 
   // Parse MPEG-TS PMT tables from raw stream bytes to detect audio tracks client-side.
   // This runs entirely in the browser using the user's home IP - no backend needed!
@@ -735,9 +740,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
 
       // Initialize or update Video.js
       if (videoRef.current) {
+        const targetSources = isIOS ? [{ src: sourceUrl, type: 'application/x-mpegURL' }] : options.sources;
+        const videoJsOptions = {
+          ...options,
+          sources: targetSources,
+        };
+
         if (!playerRef.current) {
           // Initialize Video.js on the ref'd video element
-          const player = playerRef.current = videojs(videoRef.current, options, () => {
+          const player = playerRef.current = videojs(videoRef.current, videoJsOptions, () => {
             videojs.log('player is ready')
             if (onReady) {
               onReady(player)
@@ -756,8 +767,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
           }
         } else {
           const player = playerRef.current
-          player.autoplay(options.autoplay)
-          player.src(options.sources)
+          player.autoplay(videoJsOptions.autoplay)
+          player.src(videoJsOptions.sources)
           
           updateVideoJsAudioTracks(player)
         }

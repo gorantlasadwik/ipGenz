@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, HttpException, HttpStatus, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HttpService } from '@nestjs/axios';
 import { catchError, firstValueFrom } from 'rxjs';
@@ -7,17 +7,62 @@ import { CodecService } from './codec.service';
 import { ContentType } from '@prisma/client';
 import { spawn } from 'child_process';
 import { PassThrough } from 'stream';
+import * as fs from 'fs';
+import * as path from 'path';
 const ffmpegStatic = require('ffmpeg-static');
 
+interface HlsSession {
+  channelId: string;
+  ffmpegProcess: any;
+  stitcher: PassThrough;
+  lastActive: number;
+  tempDir: string;
+  isClientDisconnected: boolean;
+}
+
 @Injectable()
-export class StreamService {
+export class StreamService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(StreamService.name);
+  private hlsSessions = new Map<string, HlsSession>();
+  private hlsCleanupInterval: any = null;
 
   constructor(
     private prisma: PrismaService,
     private httpService: HttpService,
     private codecService: CodecService,
   ) {}
+
+  onModuleInit() {
+    const mainHlsDir = path.join(process.cwd(), 'temp_hls');
+    if (fs.existsSync(mainHlsDir)) {
+      try {
+        fs.rmSync(mainHlsDir, { recursive: true, force: true });
+      } catch (e: any) {
+        this.logger.error(`Failed to clean main HLS dir: ${e.message}`);
+      }
+    }
+    fs.mkdirSync(mainHlsDir, { recursive: true });
+    this.hlsCleanupInterval = setInterval(() => this.cleanupExpiredHlsSessions(), 10000);
+  }
+
+  onModuleDestroy() {
+    if (this.hlsCleanupInterval) {
+      clearInterval(this.hlsCleanupInterval);
+    }
+    for (const session of this.hlsSessions.values()) {
+      this.destroyHlsSession(session);
+    }
+    this.hlsSessions.clear();
+
+    const mainHlsDir = path.join(process.cwd(), 'temp_hls');
+    if (fs.existsSync(mainHlsDir)) {
+      try {
+        fs.rmSync(mainHlsDir, { recursive: true, force: true });
+      } catch (e: any) {
+        this.logger.error(`Failed to delete main HLS dir on destroy: ${e.message}`);
+      }
+    }
+  }
 
   /**
    * Pure Node.js MPEG-TS PID filter for audio track selection.
@@ -774,5 +819,167 @@ export class StreamService {
     } catch (e) {
       res.status(500).send('Failed to download episode');
     }
+  }
+
+  private destroyHlsSession(session: HlsSession) {
+    this.logger.log(`Cleaning up HLS session for channel ${session.channelId}`);
+    session.isClientDisconnected = true;
+    try { session.stitcher.destroy(); } catch (_) {}
+    try { session.ffmpegProcess.stdin.destroy(); } catch (_) {}
+    try { session.ffmpegProcess.kill('SIGKILL'); } catch (_) {}
+    
+    setTimeout(() => {
+      if (fs.existsSync(session.tempDir)) {
+        try {
+          fs.rmSync(session.tempDir, { recursive: true, force: true });
+        } catch (e: any) {
+          this.logger.warn(`Failed to clean directory ${session.tempDir}: ${e.message}`);
+        }
+      }
+    }, 1000);
+  }
+
+  private cleanupExpiredHlsSessions() {
+    const now = Date.now();
+    const expiryThreshold = 30000; // 30 seconds idle
+    for (const [channelId, session] of this.hlsSessions.entries()) {
+      if (now - session.lastActive > expiryThreshold) {
+        this.destroyHlsSession(session);
+        this.hlsSessions.delete(channelId);
+      }
+    }
+  }
+
+  async getHlsPlaylist(channelId: string, userId: string, token: string, res: Response) {
+    const channel = await this.prisma.liveChannel.findFirst({
+      where: { id: channelId, provider: { userId } },
+    });
+    if (!channel || !channel.streamUrl) {
+      throw new NotFoundException('Channel not found');
+    }
+
+    const streamUrl = channel.streamUrl;
+    let session = this.hlsSessions.get(channelId);
+
+    if (!session) {
+      this.logger.log(`Starting dynamic HLS transcode for iOS on channel ${channelId}`);
+      const tempDir = path.join(process.cwd(), 'temp_hls', channelId);
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      const ffmpegPath = process.env.NODE_ENV === 'production' ? 'ffmpeg' : ffmpegStatic;
+      
+      const args = [
+        '-fflags', '+genpts+discardcorrupt+igndts',
+        '-i', 'pipe:0',
+        '-c:v', 'copy',
+        '-c:a', 'aac', '-b:a', '128k', '-ac', '2',
+        '-avoid_negative_ts', 'make_zero',
+        '-f', 'hls',
+        '-hls_time', '2',
+        '-hls_list_size', '5',
+        '-hls_flags', 'delete_segments',
+        '-hls_segment_filename', path.join(tempDir, 'seg_%d.ts'),
+        path.join(tempDir, 'playlist.m3u8')
+      ];
+
+      const ffmpegProcess = spawn(ffmpegPath, args) as any;
+      const stitcher = new PassThrough();
+      stitcher.pipe(ffmpegProcess.stdin);
+
+      const activeSession: HlsSession = {
+        channelId,
+        ffmpegProcess,
+        stitcher,
+        lastActive: Date.now(),
+        tempDir,
+        isClientDisconnected: false,
+      };
+
+      session = activeSession;
+      this.hlsSessions.set(channelId, session);
+
+      const streamHeaders = {
+        'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
+        'Accept': '*/*',
+        'Accept-Encoding': 'identity',
+      };
+
+      this.pipeSegmentsInfinitely(streamUrl, streamHeaders, stitcher, () => activeSession.isClientDisconnected)
+        .catch(e => {
+          this.logger.error(`[HlsStitcher] Loop crashed: ${e.message}`);
+          this.destroyHlsSession(activeSession);
+          this.hlsSessions.delete(channelId);
+        });
+
+      ffmpegProcess.stderr.on('data', (data: any) => {
+        const str = data.toString().trim();
+        if (str.toLowerCase().includes('warning') || str.toLowerCase().includes('error')) {
+          this.logger.warn(`FFmpeg HLS Stderr: ${str}`);
+        }
+      });
+
+      ffmpegProcess.on('close', (code: any) => {
+        this.logger.log(`FFmpeg HLS exited with code ${code}`);
+        this.destroyHlsSession(activeSession);
+        this.hlsSessions.delete(channelId);
+      });
+    }
+
+    session.lastActive = Date.now();
+
+    const playlistPath = path.join(session.tempDir, 'playlist.m3u8');
+    let attempts = 0;
+    while (!fs.existsSync(playlistPath) && attempts < 100) {
+      await new Promise(r => setTimeout(r, 100));
+      attempts++;
+    }
+
+    if (!fs.existsSync(playlistPath)) {
+      this.logger.error(`HLS playlist generation timed out for channel ${channelId}`);
+      if (!res.headersSent) res.status(504).send('Transcoding Timeout');
+      return;
+    }
+
+    try {
+      let content = fs.readFileSync(playlistPath, 'utf8');
+      content = content.replace(/(seg_\d+\.ts)/g, `$1?token=${token}`);
+
+      res.set({
+        'Content-Type': 'application/x-mpegURL',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.send(content);
+    } catch (e: any) {
+      this.logger.error(`Error reading HLS playlist: ${e.message}`);
+      if (!res.headersSent) res.status(500).send('Internal Server Error');
+    }
+  }
+
+  async getHlsSegment(channelId: string, segmentName: string, res: Response) {
+    const session = this.hlsSessions.get(channelId);
+    if (!session) {
+      if (!res.headersSent) res.status(404).send('Session not found');
+      return;
+    }
+
+    session.lastActive = Date.now();
+
+    const segmentPath = path.join(session.tempDir, segmentName);
+    if (!fs.existsSync(segmentPath)) {
+      if (!res.headersSent) res.status(404).send('Segment not found');
+      return;
+    }
+
+    res.set({
+      'Content-Type': 'video/mp2t',
+      'Cache-Control': 'max-age=3600',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    const stream = fs.createReadStream(segmentPath);
+    stream.pipe(res);
   }
 }

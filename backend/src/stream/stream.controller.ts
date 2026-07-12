@@ -22,6 +22,26 @@ export class StreamController {
     return this.streamService.proxyLiveStream(channelId, trackNum, targetUserId, res, transcode);
   }
 
+  @Get('live/:channelId/playlist.m3u8')
+  async getHlsPlaylist(
+    @Request() req: any,
+    @Param('channelId') channelId: string,
+    @Query('token') token: string,
+    @Res() res: Response,
+  ) {
+    const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
+    return this.streamService.getHlsPlaylist(channelId, targetUserId, token, res);
+  }
+
+  @Get('live/:channelId/:segmentName')
+  async getHlsSegment(
+    @Param('channelId') channelId: string,
+    @Param('segmentName') segmentName: string,
+    @Res() res: Response,
+  ) {
+    return this.streamService.getHlsSegment(channelId, segmentName, res);
+  }
+
   @Get('live/:channelId/info')
   async getLiveChannelInfo(@Request() req: any, @Param('channelId') channelId: string) {
     const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
