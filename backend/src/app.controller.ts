@@ -11,52 +11,89 @@ export class AppController {
   }
 
   @Get('debug-ffmpeg')
-  async debugFfmpeg(@Res() res: any) {
+  async debugFfmpeg(@Res() res: any, @Query('id') channelId?: string) {
     const { spawn } = require('child_process');
     const ffmpegStatic = require('ffmpeg-static');
-    const streamUrl = 'http://buxplay.org:8080/live/38485858999/83848595595/135457.ts';
-    
-    const args = [
-      '-user_agent', 'VLC/3.0.16 LibVLC/3.0.16',
-      '-i', streamUrl,
-      '-c:v', 'copy',
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-ac', '2',
-      '-copyts',
-      '-muxdelay', '0',
-      '-max_muxing_queue_size', '1024',
-      '-f', 'mpegts',
-      'pipe:1'
-    ];
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
 
+    const targetId = channelId || '261c910c-e29d-443d-ae6d-8238bdd4bc43';
+    
     res.set({
       'Content-Type': 'text/plain',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     });
 
-    res.write(`Spawning FFmpeg from path: ${ffmpegStatic}\n`);
-    res.write(`Args: ${args.join(' ')}\n\n`);
+    try {
+      const channel = await prisma.liveChannel.findUnique({
+        where: { id: targetId }
+      });
 
-    const proc = spawn(ffmpegStatic, args);
+      if (!channel) {
+        res.write(`Channel not found in database: ${targetId}\n`);
+        res.end();
+        await prisma.$disconnect();
+        return;
+      }
 
-    proc.stdout.on('data', (chunk: any) => {
-      res.write(`[STDOUT] Received ${chunk.length} bytes\n`);
-    });
+      res.write(`Channel: ${channel.name}\n`);
+      res.write(`IPTV Source URL: ${channel.streamUrl}\n`);
+      res.write(`Spawning FFmpeg from path: ${ffmpegStatic}\n`);
 
-    proc.stderr.on('data', (data: any) => {
-      res.write(`[STDERR] ${data.toString()}`);
-    });
+      const args = [
+        '-user_agent', 'VLC/3.0.16 LibVLC/3.0.16',
+        '-i', channel.streamUrl,
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ac', '2',
+        '-copyts',
+        '-muxdelay', '0',
+        '-max_muxing_queue_size', '1024',
+        '-f', 'mpegts',
+        'pipe:1'
+      ];
 
-    proc.on('close', (code: any) => {
-      res.write(`\n[CLOSE] FFmpeg exited with code ${code}\n`);
+      res.write(`Args: ${args.join(' ')}\n\n`);
+
+      const proc = spawn(ffmpegStatic, args);
+      let receivedBytes = 0;
+      let startTime = Date.now();
+
+      proc.stdout.on('data', (chunk: any) => {
+        receivedBytes += chunk.length;
+        res.write(`[STDOUT] Received ${chunk.length} bytes (Total: ${receivedBytes})\n`);
+      });
+
+      proc.stderr.on('data', (data: any) => {
+        res.write(`[STDERR] ${data.toString()}`);
+      });
+
+      proc.on('close', (code: any) => {
+        res.write(`\n[CLOSE] FFmpeg exited with code ${code} after ${((Date.now() - startTime) / 1000).toFixed(1)}s\n`);
+        res.end();
+      });
+
+      proc.on('error', (err: any) => {
+        res.write(`\n[ERROR] Failed to start FFmpeg: ${err.message}\n`);
+        res.end();
+      });
+
+      // Automatically terminate after 15 seconds to prevent hanging
+      setTimeout(() => {
+        if (!proc.killed) {
+          res.write(`\n[TIMEOUT] Auto-killing FFmpeg process after 15s...\n`);
+          proc.kill('SIGKILL');
+        }
+      }, 15000);
+
+    } catch (e: any) {
+      res.write(`[ERROR] ${e.message}\n`);
       res.end();
-    });
-
-    proc.on('error', (err: any) => {
-      res.write(`\n[ERROR] Failed to start FFmpeg: ${err.message}\n`);
-      res.end();
-    });
+    } finally {
+      await prisma.$disconnect();
+    }
   }
 }
+
 
