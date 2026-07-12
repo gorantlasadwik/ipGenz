@@ -409,14 +409,41 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
 
             mpegtsPlayerRef.current = mpegtsPlayer
             mpegtsPlayer.attachMediaElement(videoRef.current)
-            
-            mpegtsPlayer.on(mpegts.Events.ERROR, (type: any, detail: any, info: any) => {
-              console.warn("mpegts.js error occurred in VideoPlayer:", type, detail, info)
+
+            // Auto-transcode recovery: when mpegts.js reads the actual stream codec,
+            // check if the browser supports it. If not (AC3/EAC3/MP2), switch to transcoded URL.
+            mpegtsPlayer.on(mpegts.Events.MEDIA_INFO, () => {
+              try {
+                const info = mpegtsPlayer.mediaInfo
+                // audioCodec from mpegts.js is in format like 'ac-3', 'ec-3', 'mp4a.40.2'
+                const rawCodec = (info?.audioCodec || '').toLowerCase()
+                const isUnsupported = rawCodec.includes('ac-3') || rawCodec.includes('ac3') ||
+                  rawCodec.includes('ec-3') || rawCodec.includes('eac3') ||
+                  rawCodec.includes('mp2') || rawCodec === 'audio'
+
+                if (isUnsupported && !sourceUrlToPlay.includes('transcode=audio')) {
+                  console.log(`[VideoPlayer] mpegts detected unsupported audio codec '${rawCodec}' — switching to server-side transcoding...`)
+                  setClientDetectedTranscodeNeeded(true) // triggers sourceUrl update → player reloads
+                } else {
+                  updateMpegtsAudioTracks(mpegtsPlayer)
+                }
+              } catch (e) {
+                updateMpegtsAudioTracks(mpegtsPlayer)
+              }
             })
 
-            mpegtsPlayer.on(mpegts.Events.MEDIA_INFO, () => {
-              updateMpegtsAudioTracks(mpegtsPlayer)
+            mpegtsPlayer.on(mpegts.Events.ERROR, (type: any, detail: any, info: any) => {
+              console.warn("mpegts.js error occurred in VideoPlayer:", type, detail, info)
+              // If we get an MSE error and we haven't already enabled transcoding,
+              // it's likely a codec incompatibility (AC3/EAC3). Auto-retry with transcoding.
+              if (type === 'MSEError' || (detail && detail.toLowerCase?.().includes('codec'))) {
+                if (!sourceUrlToPlay.includes('transcode=audio') && !sourceUrlToPlay.includes('transcode=video')) {
+                  console.log('[VideoPlayer] MSE codec error detected — enabling server-side audio transcoding...')
+                  setClientDetectedTranscodeNeeded(true)
+                }
+              }
             })
+
 
             mpegtsPlayer.load()
 
