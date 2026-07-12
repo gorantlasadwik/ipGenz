@@ -243,17 +243,15 @@ export class StreamService {
     const transcodeType = transcode === 'video' ? 'VIDEO' : 'AUDIO';
     const isDolby = channel && this.isDolbyName(channel.name);
 
+    // If a specific audio track is requested, transcode using FFmpeg so the browser can decode the selected audio track (AAC)
+    if (audioTrack !== undefined) {
+      const type = (profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO';
+      return this.handleTranscodeStream(streamUrl, type as any, res, audioTrack);
+    }
+
     if (forceTranscode || (profile && profile.transcodingRequired && profile.transcodeType) || isDolby) {
       const type = forceTranscode ? transcodeType : ((profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO');
       return this.handleTranscodeStream(streamUrl, type as any, res);
-    }
-
-    // If a specific audio track is requested, use the Node.js PID filter instead of FFmpeg.
-    // FFmpeg gets blocked by IPTV providers on cloud datacenters (Render), but the Node.js
-    // HTTP proxy works fine. The PID filter reads 188-byte TS packets and drops all audio
-    // PIDs except the requested one — no FFmpeg needed!
-    if (audioTrack !== undefined) {
-      return this.handlePidFilterStream(streamUrl, audioTrack, res);
     }
 
     try {
