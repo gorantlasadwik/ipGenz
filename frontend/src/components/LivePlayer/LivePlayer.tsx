@@ -57,6 +57,9 @@ export function LivePlayer({
   const [isTranscoding, setIsTranscoding] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [reconnectInfo, setReconnectInfo] = useState<{ attempt: number; reason: string } | null>(null)
+  // v3: live buffer level — drives overlay visibility decisions
+  const [bufferedSec, setBufferedSec] = useState(0)
+  const [bufferHealth, setBufferHealth] = useState<string>('filling')
 
   // ── Controller init ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -91,9 +94,14 @@ export function LivePlayer({
       controller.events.on('TRANSCODE_NEEDED', () => {
         setIsTranscoding(true)
       }),
+      // v3: buffer reports — drive overlay decisions in UI
+      controller.events.on('BUFFER_REPORT', (report: any) => {
+        setBufferedSec(report.bufferedSec)
+        setBufferHealth(report.health)
+      }),
       controller.events.on('RECONNECTING', ({ attempt, reason }: any) => {
         setReconnectInfo({ attempt, reason })
-        setState('recovering')
+        // Don't override state here — controller decides based on buffer
       }),
       controller.events.on('RECOVERED', () => {
         setReconnectInfo(null)
@@ -185,13 +193,14 @@ export function LivePlayer({
   // ── Status display ───────────────────────────────────────────────────────
   const getStatusLabel = (): { label: string; color: string } => {
     switch (state) {
-      case 'playing':   return { label: 'LIVE', color: 'bg-red-500' }
-      case 'buffering': return { label: 'BUFFERING…', color: 'bg-yellow-500' }
-      case 'waiting':   return { label: 'BUFFERING…', color: 'bg-yellow-500' }
-      case 'recovering':return { label: 'RECONNECTING…', color: 'bg-orange-500' }
-      case 'loading':   return { label: 'LOADING…', color: 'bg-blue-500' }
-      case 'error':     return { label: 'ERROR', color: 'bg-red-600' }
-      default:          return { label: 'IDLE', color: 'bg-zinc-600' }
+      case 'playing':    return { label: 'LIVE', color: 'bg-red-500' }
+      // v3: if buffer is OK during buffering/recovering, still show LIVE
+      case 'buffering':  return bufferedSec >= 3 ? { label: 'LIVE', color: 'bg-red-500' } : { label: 'BUFFERING…', color: 'bg-yellow-500' }
+      case 'waiting':    return bufferedSec >= 3 ? { label: 'LIVE', color: 'bg-red-500' } : { label: 'BUFFERING…', color: 'bg-yellow-500' }
+      case 'recovering': return bufferedSec >= 3 ? { label: 'LIVE', color: 'bg-red-500' } : { label: 'RECONNECTING…', color: 'bg-orange-500' }
+      case 'loading':    return { label: 'LOADING…', color: 'bg-blue-500' }
+      case 'error':      return { label: 'ERROR', color: 'bg-red-600' }
+      default:           return { label: 'IDLE', color: 'bg-zinc-600' }
     }
   }
 
@@ -213,29 +222,49 @@ export function LivePlayer({
         muted={isMuted}
       />
 
-      {/* ── Loading / Buffering Overlay ── */}
+      {/* ── Loading overlay — initial startup only ── */}
       {(state === 'loading' || state === 'initializing') && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 z-10">
-          <div className="w-14 h-14 rounded-full border-4 border-white/20 border-t-white animate-spin mb-4" />
-          <p className="text-white/70 text-sm tracking-wider uppercase font-medium">Loading stream…</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10">
+          <div className="w-14 h-14 rounded-full border-4 border-white/20 border-t-white animate-spin mb-5" />
+          <p className="text-white/80 text-sm tracking-wider uppercase font-semibold mb-4">Loading stream…</p>
+          {/* Buffer fill bar */}
+          <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-white/60 rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(100, (bufferedSec / 5) * 100)}%` }}
+            />
+          </div>
+          <p className="text-white/40 text-xs mt-2 font-mono">
+            {bufferedSec.toFixed(1)}s / 5.0s
+          </p>
         </div>
       )}
 
-      {/* ── Buffering spinner (inline, non-blocking) ── */}
-      {(state === 'buffering' || state === 'waiting') && (
+      {/* ── Buffering spinner — ONLY shown when buffer is truly empty ── */}
+      {(state === 'buffering' || state === 'waiting') && bufferedSec < 3 && (
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
           <div className="w-12 h-12 rounded-full border-4 border-white/20 border-t-white/80 animate-spin" />
         </div>
       )}
 
-      {/* ── Reconnecting overlay ── */}
-      {state === 'recovering' && (
+      {/* ── Recovering overlay — ONLY shown when buffer is exhausted ── */}
+      {state === 'recovering' && bufferedSec < 3 && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-10">
           <RefreshCw size={36} className="text-orange-400 animate-spin mb-3" />
           <p className="text-white font-semibold text-lg">Reconnecting…</p>
           {reconnectInfo && (
             <p className="text-white/60 text-sm mt-1">Attempt {reconnectInfo.attempt} · {reconnectInfo.reason}</p>
           )}
+        </div>
+      )}
+
+      {/* ── Silent reconnect indicator — buffer is healthy, no big overlay ── */}
+      {reconnectInfo && bufferedSec >= 3 && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-full
+                        bg-black/60 backdrop-blur-sm border border-white/10
+                        text-white/70 text-xs flex items-center gap-2 pointer-events-none">
+          <RefreshCw size={10} className="animate-spin" />
+          Reconnecting in background…
         </div>
       )}
 
@@ -271,7 +300,7 @@ export function LivePlayer({
       )}
 
       {/* ── Transcoding badge ── */}
-      {isTranscoding && state === 'playing' && (
+      {isTranscoding && (state === 'playing' || bufferedSec >= 3) && (
         <div className="absolute top-4 right-4 z-30 px-2.5 py-1 rounded-lg bg-blue-600/80 backdrop-blur-sm
                         text-white text-xs font-semibold flex items-center gap-1.5 pointer-events-none">
           <Music2 size={10} />

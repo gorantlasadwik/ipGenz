@@ -1,17 +1,20 @@
-// ─── IPGenZ Live Player v2 — Playback Session ────────────────────────────────
+// ─── IPGenZ Live Player v3 — Playback Session ────────────────────────────────
 // Each playback is an isolated session. Sessions are disposable.
 // Never reuse a session. Create a new one on every channel switch or fatal error.
+// v3 upgrade: load() immediately but gate play() behind buffer readiness.
 // Owns: the mpegts.js player instance, MediaSource lifecycle, and all event listeners.
 
 import type { SessionConfig, AudioTrack } from './types'
 import type { EventManager } from './EventManager'
 import type { CodecManager } from './CodecManager'
+import type { BufferManager } from './BufferManager'
 
 export class PlaybackSession {
   private mpegtsPlayer: any = null
   private mpegtsLib: any = null
   private destroyed = false
   private transcodeTriggered = false
+  private playStarted = false
   readonly id: string
 
   /** The URL currently being played (may differ from config.streamUrl if transcoding). */
@@ -22,6 +25,7 @@ export class PlaybackSession {
     private config: SessionConfig,
     private events: EventManager,
     private codecManager: CodecManager,
+    private bufferManager: BufferManager,
   ) {
     this.id = `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     this.activeUrl = config.streamUrl
@@ -45,7 +49,6 @@ export class PlaybackSession {
     }
 
     if (this.destroyed) return
-
     this.createPlayer(this.activeUrl)
   }
 
@@ -64,8 +67,9 @@ export class PlaybackSession {
       {
         enableWorker: true,
         enableStashBuffer: true,
-        stashInitialSize: 512,
-        // Do NOT enable liveBufferLatencyChasing — causes aggressive seeking
+        // Larger stash → fills buffer faster on first load
+        stashInitialSize: 1024,
+        // Never chase the live edge — buffer stability matters more
         liveBufferLatencyChasing: false,
       }
     )
@@ -124,19 +128,29 @@ export class PlaybackSession {
       this.events.emit('PLAYER_ERROR', { type, detail, info })
     })
 
-    // ── Load and play ────────────────────────────────────────────────────────
+    // ── Load immediately (data flows into buffer) ────────────────────────────
     player.load()
     this.events.emit('STATE_CHANGE', 'buffering')
 
+    // ── v3: Gate play() until the buffer is filled ───────────────────────────
+    // BufferManager emits the "ready" callback once MIN_START_SEC is buffered.
+    // This means the user sees a brief loading state at startup, but playback
+    // then runs smoothly and provider reconnects are hidden by the buffer.
     if (this.config.autoplay) {
-      const pp = player.play()
-      if (pp && typeof pp.catch === 'function') {
-        pp.catch((err: any) => {
-          if (err?.name === 'NotAllowedError') {
-            this.events.emit('AUTOPLAY_BLOCKED')
-          }
-        })
-      }
+      this.bufferManager.reset()
+      this.bufferManager.onBufferReady(() => {
+        if (this.destroyed || this.playStarted) return
+        this.playStarted = true
+        console.log(`[PlaybackSession:${this.id}] Buffer ready — starting play`)
+        const pp = player.play()
+        if (pp && typeof pp.catch === 'function') {
+          pp.catch((err: any) => {
+            if (err?.name === 'NotAllowedError') {
+              this.events.emit('AUTOPLAY_BLOCKED')
+            }
+          })
+        }
+      })
     }
   }
 
@@ -144,6 +158,7 @@ export class PlaybackSession {
   switchUrl(newUrl: string): void {
     if (this.destroyed) return
     this.activeUrl = newUrl
+    this.playStarted = false
     console.log(`[PlaybackSession:${this.id}] Switching URL to: ${newUrl}`)
     if (this.mpegtsPlayer) {
       try {
@@ -157,6 +172,7 @@ export class PlaybackSession {
   }
 
   play(): void {
+    this.playStarted = true
     try { this.mpegtsPlayer?.play() } catch {}
   }
 
