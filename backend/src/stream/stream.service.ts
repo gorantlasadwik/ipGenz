@@ -133,16 +133,14 @@ export class StreamService {
       args.push('-ss', startTime.toString());
     }
 
-    // Do NOT use -re for live streams as it causes buffer starvation and lockups on network feeds.
+    // Spoof User-Agent BEFORE -i so FFmpeg uses it when connecting to the source
+    args.push('-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
     args.push('-i', streamUrl);
 
     if (audioTrack !== undefined) {
       // Map the first video stream and the selected audio stream index
       args.push('-map', '0:v?', '-map', `0:a:${audioTrack}`);
     }
-
-    // Spoof User-Agent to bypass provider datacenter IP / bot blocks
-    args.push('-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
 
     if (transcodeType === 'AUDIO') {
       // Audio Transcode: copy video tracks, transcode audio to compatible stereo AAC
@@ -241,7 +239,16 @@ export class StreamService {
 
     const forceTranscode = transcode === 'audio' || transcode === 'video';
     const transcodeType = transcode === 'video' ? 'VIDEO' : 'AUDIO';
-    const isDolby = channel && this.isDolbyName(channel.name);
+
+    // Key insight: If a stream profile confirms it's browser-compatible (aac/h264/etc),
+    // then proxy directly for efficiency. Otherwise, default to audio transcoding to
+    // guarantee AC3/EAC3/MP2/unsupported codecs play in browsers.
+    // This handles the case where ffprobe can't probe the stream (common on cloud IPs).
+    const isConfirmedSupported = profile && !profile.transcodingRequired && !profile.isBroken;
+
+    if (forceTranscode) {
+      return this.handleTranscodeStream(streamUrl, transcodeType as any, res);
+    }
 
     // If a specific audio track is requested, transcode using FFmpeg so the browser can decode the selected audio track (AAC)
     if (audioTrack !== undefined) {
@@ -249,9 +256,16 @@ export class StreamService {
       return this.handleTranscodeStream(streamUrl, type as any, res, audioTrack);
     }
 
-    if (forceTranscode || (profile && profile.transcodingRequired && profile.transcodeType) || isDolby) {
-      const type = forceTranscode ? transcodeType : ((profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO');
-      return this.handleTranscodeStream(streamUrl, type as any, res);
+    // If profile says transcoding is needed (video codec issue), transcode video+audio
+    if (profile && profile.transcodingRequired && profile.transcodeType === 'VIDEO') {
+      return this.handleTranscodeStream(streamUrl, 'VIDEO', res);
+    }
+
+    // DEFAULT: transcode audio to AAC unless we have a confirmed browser-compatible profile.
+    // This ensures AC3/EAC3/MP2 streams always have working audio in browsers.
+    if (!isConfirmedSupported) {
+      this.logger.log(`Channel ${channelId}: No confirmed profile — defaulting to audio transcoding for browser compatibility.`);
+      return this.handleTranscodeStream(streamUrl, 'AUDIO', res);
     }
 
     try {
