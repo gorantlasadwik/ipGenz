@@ -45,7 +45,10 @@ export class RecoveryManager {
 
   private onHealthReport(report: HealthReport): void {
     if (this.disabled || this.pendingTimeout) return
-    if (report.isStalled) {
+    if (report.isVideoFrozen) {
+      console.warn(`[RecoveryManager] Video frozen detected — scheduling recovery`)
+      this.scheduleRecovery('decoder_error')
+    } else if (report.isStalled) {
       console.warn(`[RecoveryManager] Stall detected — scheduling recovery`)
       this.scheduleRecovery('stall')
     } else if (report.status === 'disconnected') {

@@ -248,6 +248,12 @@ export class PlayerController {
     if (this.destroyed) return
     this.selectedAudioTrack = trackId
     this.currentAudioTracks = this.currentAudioTracks.map(t => ({ ...t, active: t.id === trackId }))
+
+    const selectedTrack = this.currentAudioTracks.find(t => t.id === trackId)
+    if (selectedTrack) {
+      this.transcodeAudio = !this.codec.browserCanPlayAudio(selectedTrack.codec)
+    }
+
     this.rebuildSession()
   }
 

@@ -368,6 +368,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     startTime?: number,
     isLive = false,
     channelId = 'unknown-transcode',
+    transcode?: string,
   ) {
     this.logger.log(
       `[FFMPEG_START_INIT][Channel:${channelId}] Preparing FFmpeg transcode. Type: ${transcodeType}, URL: ${streamUrl}, ` +
@@ -407,6 +408,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
         () => clientDisconnected,
         transcodeType,
         audioTrack,
+        transcode,
       ).catch(e => {
         this.logger.error(`[FFMPEG_STITCHER_ERROR][Channel:${channelId}] Transcode loop crashed: ${e.message}`);
         if (!res.writableEnded) res.end();
@@ -449,9 +451,15 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       args.push('-map', '0:v?', '-map', `0:a:${audioTrack}`);
     }
 
+    const isAudioTranscodeRequired = transcode === 'audio';
+
     if (transcodeType === 'AUDIO') {
       args.push('-c:v', 'copy');
-      args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
+      if (isAudioTranscodeRequired) {
+        args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
+      } else {
+        args.push('-c:a', 'copy');
+      }
     } else {
       args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23');
       args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
@@ -524,14 +532,16 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     isClientDisconnected: () => boolean,
     transcodeType?: 'AUDIO' | 'VIDEO',
     audioTrack?: number,
+    transcode?: string,
   ): Promise<void> {
     const useDynamicRestart = process.env.USE_DYNAMIC_FFMPEG_RESTART === 'true';
     let consecutiveErrors = 0;
     let totalBytesWritten = 0;
+    const isAudioTranscodeRequired = transcode === 'audio';
 
     this.logger.log(
       `[StitcherStart][Channel:${channelId}] Starting pipe segments infinitely. ` +
-      `TranscodeType: ${transcodeType || 'none'}, UseDynamicRestart: ${useDynamicRestart}`
+      `TranscodeType: ${transcodeType || 'none'}, UseDynamicRestart: ${useDynamicRestart}, AudioTranscodeRequired: ${isAudioTranscodeRequired}`
     );
 
     const ffmpegPath = process.env.NODE_ENV === 'production' ? 'ffmpeg' : ffmpegStatic;
@@ -552,10 +562,18 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       }
       if (transcodeType === 'AUDIO') {
         args.push('-c:v', 'copy');
-        args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
+        if (isAudioTranscodeRequired) {
+          args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
+        } else {
+          args.push('-c:a', 'copy');
+        }
       } else {
         args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23');
-        args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
+        if (isAudioTranscodeRequired) {
+          args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
+        } else {
+          args.push('-c:a', 'copy');
+        }
       }
       args.push('-avoid_negative_ts', 'make_zero');
       args.push('-muxdelay', '0');
@@ -635,10 +653,18 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
             }
             if (transcodeType === 'AUDIO') {
               args.push('-c:v', 'copy');
-              args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
+              if (isAudioTranscodeRequired) {
+                args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
+              } else {
+                args.push('-c:a', 'copy');
+              }
             } else {
               args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23');
-              args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
+              if (isAudioTranscodeRequired) {
+                args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2');
+              } else {
+                args.push('-c:a', 'copy');
+              }
             }
             args.push('-avoid_negative_ts', 'make_zero');
             args.push('-muxdelay', '0');
@@ -803,18 +829,18 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     // If client explicitly requested transcoding (detected unsupported codec client-side).
     // isLive=true → segment stitcher keeps FFmpeg stdin open forever.
     if (forceTranscode) {
-      return this.handleTranscodeStream(streamUrl, transcodeType as any, res, undefined, undefined, true, channelId);
+      return this.handleTranscodeStream(streamUrl, transcodeType as any, res, undefined, undefined, true, channelId, transcode);
     }
 
     // If a specific audio track is requested, transcode with stitcher (live).
     if (audioTrack !== undefined) {
       const type = (profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO';
-      return this.handleTranscodeStream(streamUrl, type as any, res, audioTrack, undefined, true, channelId);
+      return this.handleTranscodeStream(streamUrl, type as any, res, audioTrack, undefined, true, channelId, transcode);
     }
 
     // If profile (from background ffprobe cache) confirms transcoding is needed
     if (profile && profile.transcodingRequired && profile.transcodeType) {
-      return this.handleTranscodeStream(streamUrl, profile.transcodeType as any, res, undefined, undefined, true, channelId);
+      return this.handleTranscodeStream(streamUrl, profile.transcodeType as any, res, undefined, undefined, true, channelId, transcode || 'audio');
     }
 
     // ── DIRECT PROXY: segment stitcher ────────────────────────────────────────
@@ -906,7 +932,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     // If a specific audio track or start time is requested, we MUST transcode/remux using FFmpeg.
     if (audioTrack !== undefined || start !== undefined || forceTranscode || (profile && profile.transcodingRequired && profile.transcodeType) || isDolby) {
       const type = forceTranscode ? transcodeType : ((profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO');
-      return this.handleTranscodeStream(movie.streamUrl, type, res, audioTrack, start);
+      return this.handleTranscodeStream(movie.streamUrl, type, res, audioTrack, start, false, movieId, transcode);
     }
 
     // Proxy the stream directly while supporting Range requests
@@ -998,7 +1024,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     // If a specific audio track or start time is requested, we MUST transcode/remux using FFmpeg.
     if (audioTrack !== undefined || start !== undefined || forceTranscode || (profile && profile.transcodingRequired && profile.transcodeType) || isDolby) {
       const type = forceTranscode ? transcodeType : ((profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO');
-      return this.handleTranscodeStream(episode.streamUrl, type, res, audioTrack, start);
+      return this.handleTranscodeStream(episode.streamUrl, type, res, audioTrack, start, false, episodeId, transcode);
     }
 
     // Proxy the stream directly while supporting Range requests

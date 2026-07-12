@@ -13,6 +13,7 @@ export interface HealthReport {
   bufferedSec: number
   isStalled: boolean
   isPaused: boolean
+  isVideoFrozen?: boolean
 }
 
 export class HealthMonitor {
@@ -20,6 +21,8 @@ export class HealthMonitor {
   private videoEl: HTMLVideoElement | null = null
   private lastCurrentTime = -1
   private stallCount = 0
+  private lastTotalVideoFrames = -1
+  private videoFrozenCount = 0
   // Stall = currentTime hasn't moved for > 3 consecutive checks while not paused
   private readonly STALL_THRESHOLD = 3
 
@@ -44,6 +47,8 @@ export class HealthMonitor {
     }
     this.stallCount = 0
     this.lastCurrentTime = -1
+    this.lastTotalVideoFrames = -1
+    this.videoFrozenCount = 0
   }
 
   private check() {
@@ -72,6 +77,27 @@ export class HealthMonitor {
       }
       isStalled = this.stallCount >= this.STALL_THRESHOLD
     }
+
+    // Video frozen detection: total frames not moving while time is moving
+    let isVideoFrozen = false
+    try {
+      const quality = (el as any).getVideoPlaybackQuality?.()
+      if (quality) {
+        const totalFrames = quality.totalVideoFrames || 0
+        if (!isPaused && readyState >= 2 && Math.abs(currentTime - this.lastCurrentTime) > 0.05) {
+          if (totalFrames === this.lastTotalVideoFrames) {
+            this.videoFrozenCount++
+            if (this.videoFrozenCount >= 3) { // 3 seconds of no frames
+              isVideoFrozen = true
+            }
+          } else {
+            this.videoFrozenCount = 0
+          }
+        }
+        this.lastTotalVideoFrames = totalFrames
+      }
+    } catch {}
+
     this.lastCurrentTime = currentTime
 
     // Determine health status
@@ -92,6 +118,7 @@ export class HealthMonitor {
       bufferedSec,
       isStalled,
       isPaused,
+      isVideoFrozen,
     }
 
     this.events.emit('HEALTH_REPORT', report)
@@ -100,6 +127,8 @@ export class HealthMonitor {
   resetStallCount() {
     this.stallCount = 0
     this.lastCurrentTime = -1
+    this.lastTotalVideoFrames = -1
+    this.videoFrozenCount = 0
   }
 
   destroy() {
