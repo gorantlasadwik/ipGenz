@@ -135,6 +135,8 @@ export class StreamService {
 
     // Spoof User-Agent BEFORE -i so FFmpeg uses it when connecting to the source
     args.push('-user_agent', 'VLC/3.0.16 LibVLC/3.0.16');
+    // Generate clean monotonic timestamps and drop corrupt packets to handle stream discontinuities without crashing
+    args.push('-fflags', '+genpts+discardcorrupt+igndts');
     args.push('-i', streamUrl);
 
     if (audioTrack !== undefined) {
@@ -158,10 +160,8 @@ export class StreamService {
       args.push('-ac', '2');
     }
 
-    // Use -copyts to ensure the transcoded audio track maintains the same timestamps as the copied video track
-    // If we don't copy timestamps, the audio resets to 0 while video stays at the live stream's timestamp,
-    // causing a massive A/V desync that makes mpegts.js completely drop the audio playback!
-    args.push('-copyts');
+    // Ensure output timestamps are monotonically increasing starting from zero
+    args.push('-avoid_negative_ts', 'make_zero');
     args.push('-muxdelay', '0');
     args.push('-max_muxing_queue_size', '1024');
     args.push('-f', 'mpegts');
