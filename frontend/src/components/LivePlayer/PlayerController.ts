@@ -187,21 +187,51 @@ export class PlayerController {
 
   private async runCodecDetection(): Promise<void> {
     try {
+      // 1. Try querying the backend info API first (probes the raw stream on provider directly)
+      const info = await this.stream.fetchBackendCodecInfo().catch(() => null)
+      if (info && info.allAudioStreams && info.allAudioStreams.length > 0) {
+        console.log(`[PlayerController] Backend returned ${info.allAudioStreams.length} audio track(s)`)
+        const tracks: AudioTrack[] = info.allAudioStreams.map((s: any) => ({
+          id: s.id,
+          label: `Track ${s.id + 1} (${(s.language || 'und').toUpperCase()}) [${(s.codec || 'AAC').toUpperCase()}]`,
+          language: s.language || 'und',
+          codec: this.codec.parseAudioCodecFromMediaInfo(s.codec || 'AAC'),
+          active: s.id === (this.selectedAudioTrack !== null ? this.selectedAudioTrack : 0),
+        }))
+        this.currentAudioTracks = tracks
+        this.events.emit('AUDIO_TRACKS_READY', tracks)
+
+        const primary = tracks[0]
+        if (!this.codec.browserCanPlayAudio(primary.codec) && !this.transcodeTriggered) {
+          console.log(`[PlayerController] Primary track '${primary.codec}' unsupported — enabling transcode`)
+          this.transcodeTriggered = true
+          this.transcodeAudio = true
+          this.rebuildSession()
+        }
+        return
+      }
+    } catch (e) {
+      console.warn('[PlayerController] Backend info fetch error, falling back to PMT parser:', e)
+    }
+
+    // 2. Fallback: Client-side PMT parser (probes backend stream proxy)
+    try {
       const url = this.buildCurrentUrl()
       const tracks = await this.codec.detectFromStream(url)
       if (tracks.length > 0) {
+        console.log(`[PlayerController] Client PMT parser returned ${tracks.length} audio track(s)`)
         this.currentAudioTracks = tracks
         this.events.emit('AUDIO_TRACKS_READY', tracks)
         const primary = tracks[0]
         if (!this.codec.browserCanPlayAudio(primary.codec) && !this.transcodeTriggered) {
-          console.log(`[PlayerController] Client PMT: unsupported codec '${primary.codec}' — will transcode`)
+          console.log(`[PlayerController] Client PMT primary codec unsupported: ${primary.codec} — enabling transcode`)
           this.transcodeTriggered = true
           this.transcodeAudio = true
           this.rebuildSession()
         }
       }
     } catch (e) {
-      console.warn('[PlayerController] Codec detection error (non-fatal):', e)
+      console.warn('[PlayerController] Client PMT parser failed:', e)
     }
   }
 
