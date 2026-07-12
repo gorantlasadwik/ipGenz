@@ -24,20 +24,58 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   const [showSettings, setShowSettings] = useState(false)
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<number | null>(null)
   const [isTranscodingRequired, setIsTranscodingRequired] = useState(false)
+  // Set to true when client-side PMT parsing detects a codec the browser can't play natively (AC3/EAC3/MP2)
+  const [clientDetectedTranscodeNeeded, setClientDetectedTranscodeNeeded] = useState(false)
   // Use a ref so we can read the latest value inside selectAudioTrack without triggering re-renders
   const isTranscodingRequiredRef = useRef(false)
 
   // Compute isMpegTs synchronously during render
   const firstSource = options.sources?.[0]
   const rawSourceUrl = firstSource?.src || ''
-  // Browser-native audio codecs (no transcoding needed)
-  const BROWSER_NATIVE_AUDIO = ['AAC', 'MP3', 'OPUS', 'VORBIS']
-  // When user picks a track, append ?audioTrack=X to trigger backend Node.js PID filter
-  const sourceUrl = selectedAudioTrackId !== null || isTranscodingRequired
-    ? `${rawSourceUrl}${rawSourceUrl.includes('?') ? '&' : '?'}audioTrack=${selectedAudioTrackId ?? 0}`
-    : rawSourceUrl
+
+  /**
+   * Checks if the browser can natively decode an audio codec.
+   * Codecs that browsers CANNOT play in MPEG-TS streams:
+   * - AC3 (Dolby Digital): Chrome, Firefox, Opera do not support it
+   * - EAC3 (Dolby Digital Plus): Chrome, Firefox do not support it
+   * - MP2 (MPEG-1 Layer 2): Not supported in MSE by any major browser
+   * Codecs that ARE supported: AAC, MP3, Opus, Vorbis
+   */
+  const browserCanPlayCodec = (codec: string): boolean => {
+    const unsupported = new Set(['AC3', 'EAC3', 'MP2'])
+    if (unsupported.has(codec.toUpperCase())) return false
+    // Double-check with canPlayType for runtime accuracy
+    const mimeMap: Record<string, string> = {
+      'AAC': 'audio/aac',
+      'MP3': 'audio/mpeg',
+      'OPUS': 'audio/ogg; codecs="opus"',
+      'VORBIS': 'audio/ogg; codecs="vorbis"',
+    }
+    const mime = mimeMap[codec.toUpperCase()]
+    if (!mime) return false
+    const el = document.createElement('audio')
+    const result = el.canPlayType(mime)
+    return result === 'probably' || result === 'maybe'
+  }
+
+  // Smart URL builder: auto-adds ?transcode=audio when client detects unsupported codec
+  const buildSourceUrl = (): string => {
+    const params: string[] = []
+    // If client-side PMT parsing detected an unsupported codec, request server transcoding
+    if (clientDetectedTranscodeNeeded && selectedAudioTrackId === null) {
+      params.push('transcode=audio')
+    }
+    // If user selected a specific audio track, request it from server
+    if (selectedAudioTrackId !== null || isTranscodingRequired) {
+      params.push(`audioTrack=${selectedAudioTrackId ?? 0}`)
+    }
+    if (params.length === 0) return rawSourceUrl
+    return `${rawSourceUrl}${rawSourceUrl.includes('?') ? '&' : '?'}${params.join('&')}`
+  }
+
+  const sourceUrl = buildSourceUrl()
   const sourceType = firstSource?.type || ''
-  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || isTranscodingRequired || selectedAudioTrackId !== null
+  const isMpegTs = sourceType === 'video/mp2t' || sourceType === 'video/mpegts' || rawSourceUrl.includes('.ts') || isTranscodingRequired || clientDetectedTranscodeNeeded || selectedAudioTrackId !== null
 
   // Parse MPEG-TS PMT tables from raw stream bytes to detect audio tracks client-side.
   // This runs entirely in the browser using the user's home IP - no backend needed!
@@ -138,6 +176,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   // Reset states when the stream source changes and fetch tracks
   useEffect(() => {
     setAudioTracks([])
+    setClientDetectedTranscodeNeeded(false)
     
     if (rawSourceUrl && rawSourceUrl.includes('/stream/')) {
       const isMovie = rawSourceUrl.includes('/stream/movie/')
@@ -157,50 +196,85 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
         fetchPromise = api.getLiveStreamInfo(id)
       }
 
+      /**
+       * Run client-side MPEG-TS PMT codec detection.
+       * This uses the USER's home IP (not Render's cloud IP) so IPTV providers won't block it.
+       * Detects: AAC, MP2, AC3, EAC3 — then checks browser support.
+       * If the primary audio codec is not natively supported, auto-requests ?transcode=audio.
+       */
+      const runClientSideCodecDetection = async () => {
+        const parsed = await parseMpegTsAudioFromStream(rawSourceUrl)
+        if (parsed.length > 0) {
+          console.log(`[VideoPlayer] Client-side PMT parser found ${parsed.length} audio stream(s):`, parsed)
+          const primaryCodec = parsed[0]?.codec || 'AAC'
+          const canPlay = browserCanPlayCodec(primaryCodec)
+          if (!canPlay) {
+            console.log(`[VideoPlayer] Browser cannot natively play '${primaryCodec}' — enabling server-side audio transcoding (AC3→AAC)...`)
+            setClientDetectedTranscodeNeeded(true)
+          } else {
+            console.log(`[VideoPlayer] Browser natively supports '${primaryCodec}' — using direct stream (zero server overhead)`)
+          }
+          return parsed
+        }
+        return []
+      }
+
       if (fetchPromise) {
         fetchPromise
           .then(async data => {
             if (data && data.allAudioStreams && data.allAudioStreams.length > 0) {
               // Backend returned tracks — use them
-            const list = data.allAudioStreams.map((stream: any) => ({
-              id: stream.id,
-              label: `Track ${stream.id + 1} (${stream.language?.toUpperCase() || 'UND'}) [${stream.codec?.toUpperCase()}]`,
-              active: stream.id === (selectedAudioTrackId !== null ? selectedAudioTrackId : 0)
-            }))
-            setAudioTracks(list)
-          } else {
-            // Backend returned no tracks (likely IP-blocked on Render).
-            // Fall back to client-side MPEG-TS PMT parsing from the raw stream!
-            console.log('[VideoPlayer] Backend returned no audio tracks, falling back to client-side PMT parsing...')
-            const parsed = await parseMpegTsAudioFromStream(rawSourceUrl)
+              const list = data.allAudioStreams.map((stream: any) => ({
+                id: stream.id,
+                label: `Track ${stream.id + 1} (${stream.language?.toUpperCase() || 'UND'}) [${stream.codec?.toUpperCase()}]`,
+                active: stream.id === (selectedAudioTrackId !== null ? selectedAudioTrackId : 0)
+              }))
+              setAudioTracks(list)
+              // Also check if primary codec needs transcoding
+              const primaryCodec = data.allAudioStreams[0]?.codec || 'AAC'
+              if (!browserCanPlayCodec(primaryCodec)) {
+                console.log(`[VideoPlayer] Backend reports primary audio is '${primaryCodec}' — enabling server-side audio transcoding`)
+                setClientDetectedTranscodeNeeded(true)
+              }
+            } else {
+              // Backend returned no tracks (likely IP-blocked on Render).
+              // Fall back to client-side MPEG-TS PMT parsing from the raw stream!
+              console.log('[VideoPlayer] Backend returned no audio tracks, falling back to client-side PMT parsing...')
+              const parsed = await runClientSideCodecDetection()
+              if (parsed.length > 0) {
+                setAudioTracks(parsed.map(s => ({
+                  id: s.id,
+                  label: `Track ${s.id + 1} (${s.language.toUpperCase()}) [${s.codec}]`,
+                  active: s.id === 0
+                })))
+              }
+            }
+            if (data && data.transcodingRequired) {
+              setIsTranscodingRequired(true)
+            }
+          })
+          .catch(async err => {
+            console.warn("Backend stream info fetch failed, trying client-side PMT parsing:", err)
+            const parsed = await runClientSideCodecDetection()
             if (parsed.length > 0) {
-              console.log(`[VideoPlayer] Client-side PMT parser found ${parsed.length} audio stream(s):`, parsed)
               setAudioTracks(parsed.map(s => ({
                 id: s.id,
                 label: `Track ${s.id + 1} (${s.language.toUpperCase()}) [${s.codec}]`,
                 active: s.id === 0
               })))
-              // Show the detected tracks for informational purposes
-              // NOTE: Do NOT auto-enable backend transcoding here — if Render can't reach
-              // the IPTV provider (IP blocked), forcing FFmpeg transcoding kills the video too!
             }
-          }
-          if (data && data.transcodingRequired) {
-            setIsTranscodingRequired(true)
-          }
-        })
-        .catch(async err => {
-          console.warn("Backend stream info fetch failed, trying client-side PMT parsing:", err)
-          const parsed = await parseMpegTsAudioFromStream(rawSourceUrl)
+          });
+      } else {
+        // No backend fetch needed — just run client-side detection
+        runClientSideCodecDetection().then(parsed => {
           if (parsed.length > 0) {
             setAudioTracks(parsed.map(s => ({
               id: s.id,
               label: `Track ${s.id + 1} (${s.language.toUpperCase()}) [${s.codec}]`,
               active: s.id === 0
             })))
-            // Show tracks for informational purposes only — don't force transcoding
           }
-        });
+        })
       }
     }
   }, [rawSourceUrl])
