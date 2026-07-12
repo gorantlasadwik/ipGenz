@@ -232,7 +232,7 @@ export default function ProvidersPage() {
                 <p className="text-xs font-semibold text-white/50 mb-6">
                   {syncProgress.step === 'Syncing Live Channels' && `Channels imported: ${syncProgress.processedItems} / ${syncProgress.totalItems}`}
                   {syncProgress.step === 'Syncing Movies' && `Movies imported: ${syncProgress.processedItems} / ${syncProgress.totalItems}`}
-                  {syncProgress.step === 'Syncing TV Series' && `Episodes imported: ${syncProgress.processedItems} / ${syncProgress.totalItems}`}
+                  {syncProgress.step === 'Syncing TV Series' && `Series imported: ${syncProgress.processedItems} / ${syncProgress.totalItems}`}
                   {syncProgress.step !== 'Syncing Live Channels' && syncProgress.step !== 'Syncing Movies' && syncProgress.step !== 'Syncing TV Series' && `Items imported: ${syncProgress.processedItems} / ${syncProgress.totalItems}`}
                 </p>
               </>

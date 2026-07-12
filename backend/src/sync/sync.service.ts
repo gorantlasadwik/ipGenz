@@ -184,7 +184,7 @@ export class SyncService {
       progress.totalItems = totalRealItems;
       progress.processedItems = 0;
 
-      const batchSize = 3000;
+      const batchSize = 5000;
 
       // Ingest Channels
       if (channelsToInsert.length > 0) {
