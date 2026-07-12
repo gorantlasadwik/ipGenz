@@ -352,22 +352,24 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          const onData = (chunk: Buffer) => {
-            if (!sink.writableEnded && !sink.destroyed) sink.write(chunk);
-          };
-          const onEnd = () => {
+          // Use native Node.js pipe with backpressure handling (end: false keeps sink open)
+          response.data.pipe(sink, { end: false });
+
+          const cleanup = () => {
+            try { response.data.unpipe(sink); } catch (_) {}
             response.data.removeAllListeners();
-            this.logger.log('[SegmentStitcher] Segment ended — immediately fetching next');
-            resolve();
-          };
-          const onError = (err: any) => {
-            response.data.removeAllListeners();
-            reject(err);
           };
 
-          response.data.on('data', onData);
-          response.data.on('end', onEnd);
-          response.data.on('error', onError);
+          response.data.on('end', () => {
+            cleanup();
+            this.logger.log('[SegmentStitcher] Segment ended — immediately fetching next');
+            resolve();
+          });
+
+          response.data.on('error', (err: any) => {
+            cleanup();
+            reject(err);
+          });
         });
 
         // 50 ms breathing room before the next request (avoids thundering-herd)
