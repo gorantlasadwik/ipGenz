@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Activity, Users, Database, Server, Settings, LayoutGrid, ShieldAlert, LogOut, Play, Film, CreditCard } from "lucide-react"
+import { Activity, Users, Database, Server, Settings, LayoutGrid, ShieldAlert, LogOut, Play, Film, CreditCard, Menu, X } from "lucide-react"
 import { api } from "@/lib/api"
 
 export default function AdminLayout({
@@ -16,6 +16,8 @@ export default function AdminLayout({
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -115,66 +117,107 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="flex h-screen bg-black text-white font-sans overflow-hidden">
-      {/* ─── SIDEBAR LAYOUT (Matches User Screenshot) ───────────────────── */}
-      <aside className="w-64 border-r border-white/10 bg-zinc-950 flex flex-col h-full flex-shrink-0">
-        
-        {/* Logo Section */}
-        <div className="p-6 border-b border-white/5 flex items-center gap-3">
-          <LayoutGrid className="h-6 w-6 text-red-600 fill-current animate-pulse" />
-          <span className="text-lg font-black tracking-wider font-outfit uppercase">
+    <div className="flex flex-col md:flex-row h-screen bg-black text-white font-sans overflow-hidden relative">
+      {/* Mobile Top Header */}
+      <div className="md:hidden flex items-center justify-between p-4 bg-zinc-950 border-b border-white/10 z-40 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <LayoutGrid className="h-5 w-5 text-red-600 fill-current animate-pulse" />
+          <span className="text-sm font-black tracking-wider uppercase font-outfit">
             IPGENZ Admin
           </span>
         </div>
+        <button 
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="p-2 hover:bg-white/5 rounded-lg border border-white/10 text-zinc-400 hover:text-white transition"
+        >
+          {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </div>
+
+      {/* Sidebar Overlay on mobile */}
+      {sidebarOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* ─── SIDEBAR LAYOUT (Matches User Screenshot, Responsive) ───────────────────── */}
+      <aside className={`
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
+        md:translate-x-0 
+        transition-transform duration-300 ease-in-out
+        fixed md:static inset-y-0 left-0 w-64 border-r border-white/10 bg-zinc-950 flex flex-col h-full z-50 flex-shrink-0
+      `}>
+        
+        {/* Logo Section */}
+        <div className="p-6 border-b border-white/5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <LayoutGrid className="h-6 w-6 text-red-600 fill-current animate-pulse" />
+            <span className="text-lg font-black tracking-wider font-outfit uppercase">
+              IPGENZ Admin
+            </span>
+          </div>
+          <button className="md:hidden text-zinc-500 hover:text-white" onClick={() => setSidebarOpen(false)}>
+            <X size={20} />
+          </button>
+        </div>
 
         {/* Vertical Links Menu */}
-        <nav className="flex-1 px-4 py-6 space-y-1">
+        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           <SidebarLink 
             active={pathname === "/sadwik/overview" || pathname === "/sadwik"} 
             href="/sadwik/overview" 
             icon={<Activity size={18} />} 
             label="Overview" 
+            onClick={() => setSidebarOpen(false)}
           />
           <SidebarLink 
             active={pathname === "/sadwik/users"} 
             href="/sadwik/users" 
             icon={<Users size={18} />} 
             label="Users" 
+            onClick={() => setSidebarOpen(false)}
           />
           <SidebarLink 
             active={pathname === "/sadwik/providers"} 
             href="/sadwik/providers" 
             icon={<Database size={18} />} 
             label="Providers" 
+            onClick={() => setSidebarOpen(false)}
           />
           <SidebarLink 
             active={pathname === "/sadwik/infrastructure"} 
             href="/sadwik/infrastructure" 
             icon={<Server size={18} />} 
             label="Infrastructure" 
+            onClick={() => setSidebarOpen(false)}
           />
           <SidebarLink 
             active={pathname === "/sadwik/premium"} 
             href="/sadwik/premium" 
             icon={<ShieldAlert size={18} />} 
             label="Premium Subscriptions" 
+            onClick={() => setSidebarOpen(false)}
           />
           <SidebarLink 
             active={pathname === "/sadwik/payments"} 
             href="/sadwik/payments" 
             icon={<CreditCard size={18} />} 
             label="Payment Requests" 
+            onClick={() => setSidebarOpen(false)}
           />
           <SidebarLink 
             active={pathname === "/sadwik/settings"} 
             href="/sadwik/settings" 
             icon={<Settings size={18} />} 
             label="Settings" 
+            onClick={() => setSidebarOpen(false)}
           />
         </nav>
 
         {/* Sidebar Footer */}
-        <div className="p-4 border-t border-white/5 bg-zinc-900/20 flex flex-col gap-2 text-center">
+        <div className="p-4 border-t border-white/5 bg-zinc-900/20 flex flex-col gap-2 text-center flex-shrink-0">
           <button 
             onClick={() => {
               if (confirm("Lock administrative session?")) {
@@ -219,12 +262,14 @@ interface SidebarLinkProps {
   href: string
   icon: React.ReactNode
   label: string
+  onClick?: () => void
 }
 
-function SidebarLink({ active, href, icon, label }: SidebarLinkProps) {
+function SidebarLink({ active, href, icon, label, onClick }: SidebarLinkProps) {
   return (
     <Link
       href={href}
+      onClick={onClick}
       className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-all duration-200 outline-none ${
         active 
           ? "bg-red-500/10 text-red-500 border-l-4 border-red-600 shadow-md shadow-red-500/5" 

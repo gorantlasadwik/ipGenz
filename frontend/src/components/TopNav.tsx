@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
-import { Search, Bell, User, MonitorPlay, LogOut, Settings, Users, Database, Heart, History, Clock, Zap } from "lucide-react"
+import { Search, Bell, User, MonitorPlay, LogOut, Settings, Users, Database, Heart, History, Clock, Zap, Menu, X } from "lucide-react"
 import { api } from "@/lib/api"
 
 export function TopNav() {
@@ -11,6 +11,7 @@ export function TopNav() {
   const router = useRouter()
   const [profileOpen, setProfileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [notifications, setNotifications] = useState<any[]>([])
   const [isPremiumTrial, setIsPremiumTrial] = useState(false)
   const [timeLeft, setTimeLeft] = useState<string | null>(null)
@@ -110,12 +111,12 @@ export function TopNav() {
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-gradient-to-b from-black/80 to-transparent">
-      <div className="flex items-center justify-between px-8 py-6">
+    <header className="fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-gradient-to-b from-black/90 to-transparent backdrop-blur-[2px]">
+      <div className="flex items-center justify-between px-4 md:px-8 py-4 md:py-6">
         {/* Left section: Logo and Nav Links */}
-        <div className="flex items-center gap-12">
-          <Link href="/home" className="flex items-center gap-2 font-black text-2xl tracking-tighter text-white">
-            <MonitorPlay className="h-7 w-7 text-primary" fill="currentColor" />
+        <div className="flex items-center gap-6 md:gap-12">
+          <Link href="/home" className="flex items-center gap-2 font-black text-xl md:text-2xl tracking-tighter text-white">
+            <MonitorPlay className="h-6 w-6 md:h-7 md:w-7 text-primary" fill="currentColor" />
             IPGENZ
           </Link>
           
@@ -157,9 +158,9 @@ export function TopNav() {
         </div>
 
         {/* Right section: Icons and Profile */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 md:gap-6">
           {isPremiumTrial && timeLeft && (
-            <div className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/25 text-yellow-500 text-xs px-3.5 py-1.5 rounded-xl font-mono font-bold shadow-sm shadow-yellow-500/5 select-none transition-all">
+            <div className="hidden sm:flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/25 text-yellow-500 text-[10px] md:text-xs px-3 py-1.5 rounded-xl font-mono font-bold shadow-sm shadow-yellow-500/5 select-none transition-all">
               <Clock size={13} className="text-yellow-500" />
               <span>Expires: {timeLeft}</span>
             </div>
@@ -226,7 +227,7 @@ export function TopNav() {
           <div className="relative">
             <button 
               onClick={() => { setProfileOpen(!profileOpen); setNotificationsOpen(false); }}
-              className="h-10 w-10 rounded-full bg-zinc-800 border-2 border-transparent hover:border-white transition overflow-hidden flex items-center justify-center"
+              className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-zinc-800 border-2 border-transparent hover:border-white transition overflow-hidden flex items-center justify-center"
             >
               <User size={20} className="text-white/80" />
             </button>
@@ -244,20 +245,20 @@ export function TopNav() {
                   
                   {!isPremiumTrial && (
                     <>
-                      <Link href="/providers" className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/10 transition">
+                      <Link href="/providers" className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/10 transition" onClick={() => setProfileOpen(false)}>
                         <Database size={16} className="text-primary" /> Providers
                       </Link>
-                      <Link href="/settings" className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/10 transition">
+                      <Link href="/settings" className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/10 transition" onClick={() => setProfileOpen(false)}>
                         <Settings size={16} /> Settings
                       </Link>
                     </>
                   )}
                   {isPremiumTrial && (
-                    <Link href="/subscription" className="flex items-center gap-3 px-4 py-2 text-sm text-yellow-500 hover:bg-white/10 transition">
+                    <Link href="/subscription" className="flex items-center gap-3 px-4 py-2 text-sm text-yellow-500 hover:bg-white/10 transition" onClick={() => setProfileOpen(false)}>
                       <Zap size={16} className="text-yellow-500" /> Upgrade Plan
                     </Link>
                   )}
-                  <Link href="/profiles" className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/10 transition">
+                  <Link href="/profiles" className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/10 transition" onClick={() => setProfileOpen(false)}>
                     <Users size={16} /> Switch Profile
                   </Link>
                   
@@ -273,8 +274,63 @@ export function TopNav() {
               </>
             )}
           </div>
+
+          {/* Mobile Menu Toggle */}
+          {!isExpired && (
+            <button
+              onClick={() => { setMobileMenuOpen(!mobileMenuOpen); setProfileOpen(false); setNotificationsOpen(false); }}
+              className="md:hidden text-white/80 hover:text-white transition focus:outline-none"
+            >
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Mobile Drawer menu */}
+      {mobileMenuOpen && !isExpired && (
+        <div className="md:hidden w-full bg-zinc-950/95 backdrop-blur-2xl border-b border-white/10 px-6 py-6 flex flex-col gap-6 shadow-2xl relative z-50">
+          <div className="flex flex-col gap-4">
+            {navLinks.map((link) => (
+              <Link
+                key={link.name}
+                href={link.path}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`text-sm font-bold tracking-widest transition-colors ${
+                  pathname === link.path ? "text-white" : "text-white/60 hover:text-white"
+                }`}
+              >
+                {link.name}
+              </Link>
+            ))}
+            
+            {/* Library section in mobile menu */}
+            <div className="border-t border-white/5 pt-4">
+              <p className="text-xs font-bold text-white/40 tracking-wider mb-3">LIBRARY</p>
+              <div className="flex flex-col gap-3 pl-2">
+                <Link href="/library/favorites" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-bold text-white/60 hover:text-white transition">
+                  <Heart size={16} /> FAVORITES
+                </Link>
+                <Link href="/library/watch-later" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-bold text-white/60 hover:text-white transition">
+                  <Clock size={16} /> WATCH LATER
+                </Link>
+                <Link href="/library/history" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-bold text-white/60 hover:text-white transition">
+                  <History size={16} /> HISTORY
+                </Link>
+              </div>
+            </div>
+
+            {/* Impersonated or trial badge info on mobile drawer */}
+            {isPremiumTrial && timeLeft && (
+              <div className="mt-4 flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/25 text-yellow-500 text-xs px-3.5 py-2 rounded-xl font-mono font-bold">
+                <Clock size={13} className="text-yellow-500" />
+                <span>Trial Expires: {timeLeft}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   )
 }
+

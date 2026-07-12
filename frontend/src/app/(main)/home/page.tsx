@@ -73,30 +73,30 @@ export default function HomePage() {
       )}
 
       {/* Main Content Area */}
-      <div className="relative z-10 flex-1 overflow-y-auto pt-40 px-12 pb-20 scrollbar-hide">
+      <div className="relative z-10 flex-1 overflow-y-auto pt-32 md:pt-40 px-4 sm:px-8 md:px-12 pb-20 scrollbar-hide">
         
         {/* Hero Info */}
         {featured && (
-          <div className="max-w-3xl mb-16 animate-in slide-in-from-bottom-8 duration-700 fade-in">
-            <h1 className="text-7xl font-black text-white leading-tight tracking-tighter drop-shadow-2xl mb-4">
+          <div className="max-w-3xl mb-10 md:mb-16 animate-in slide-in-from-bottom-8 duration-700 fade-in">
+            <h1 className="text-4xl sm:text-6xl md:text-7xl font-black text-white leading-tight tracking-tighter drop-shadow-2xl mb-4">
               {featured.name.toUpperCase()}
             </h1>
             
-            <div className="flex items-center gap-4 text-white/90 text-sm font-semibold mb-8">
+            <div className="flex items-center gap-4 text-white/90 text-xs md:text-sm font-semibold mb-6 md:mb-8">
               {featured.category?.name && <span>{featured.category.name}</span>}
               <span className="text-green-400">98% Match</span>
               <span>2024</span>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 md:gap-4">
               <Link 
                 href={movies.length > 0 ? `/movies/${featured.id}` : `/series/${featured.id}`} 
-                className="flex items-center gap-2 bg-[#8a2be2] hover:bg-[#9b3df3] text-white px-10 py-3 rounded-full font-bold transition shadow-[0_0_30px_rgba(138,43,226,0.5)]"
+                className="flex items-center gap-2 bg-[#8a2be2] hover:bg-[#9b3df3] text-white px-6 md:px-10 py-2.5 md:py-3 rounded-full font-bold text-sm md:text-base transition shadow-[0_0_30px_rgba(138,43,226,0.5)]"
               >
-                <Play fill="currentColor" size={20} /> PLAY
+                <Play fill="currentColor" size={16} className="md:w-5 md:h-5" /> PLAY
               </Link>
-              <button className="flex items-center justify-center w-12 h-12 rounded-full border-2 border-white/50 text-white hover:border-white transition">
-                <Plus size={24} />
+              <button className="flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-white/50 text-white hover:border-white transition flex-shrink-0">
+                <Plus size={20} className="md:w-6 md:h-6" />
               </button>
             </div>
           </div>

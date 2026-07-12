@@ -42,17 +42,17 @@ export default function SearchPage() {
   const hasResults = results.movies.length > 0 || results.series.length > 0 || results.channels.length > 0
 
   return (
-    <div className="w-full h-full overflow-y-auto px-12 py-10">
+    <div className="w-full h-full overflow-y-auto px-4 sm:px-8 md:px-12 py-6 md:py-10">
       <div className="max-w-3xl mb-12 relative group">
-        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-          <SearchIcon className="h-6 w-6 text-secondary-foreground group-focus-within:text-primary transition-colors" />
+        <div className="absolute inset-y-0 left-0 pl-3.5 md:pl-4 flex items-center pointer-events-none">
+          <SearchIcon className="h-5 w-5 md:h-6 md:w-6 text-secondary-foreground group-focus-within:text-primary transition-colors" />
         </div>
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search for movies, series, or live channels..."
-          className="w-full bg-surface border border-white/10 rounded-full py-4 pl-14 pr-6 text-xl text-white placeholder:text-secondary-foreground focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all shadow-lg"
+          className="w-full bg-surface border border-white/10 rounded-full py-3 md:py-4 pl-11 md:pl-14 pr-5 md:pr-6 text-sm md:text-xl text-white placeholder:text-secondary-foreground focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all shadow-lg"
         />
       </div>
 

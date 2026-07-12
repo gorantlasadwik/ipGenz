@@ -24,11 +24,11 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="w-full h-full overflow-y-auto px-12 py-10">
-      <div className="flex justify-between items-center mb-10">
+    <div className="w-full h-full overflow-y-auto px-4 sm:px-8 md:px-12 py-6 md:py-10">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-10">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight text-white mb-2">Watch History</h1>
-          <p className="text-secondary-foreground text-lg">Everything you've watched recently.</p>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white mb-2">Watch History</h1>
+          <p className="text-secondary-foreground text-sm md:text-lg">Everything you've watched recently.</p>
         </div>
         {history.length > 0 && (
           <button 

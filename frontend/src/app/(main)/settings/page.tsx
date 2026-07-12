@@ -9,15 +9,15 @@ export default function SettingsPage() {
   const currentProfileId = typeof window !== 'undefined' ? localStorage.getItem("profileId") : null;
 
   return (
-    <div className="w-full h-full overflow-y-auto px-12 py-10">
+    <div className="w-full h-full overflow-y-auto px-4 sm:px-8 md:px-12 py-6 md:py-10">
       <div className="mb-10">
         <h1 className="text-4xl font-bold tracking-tight text-white mb-2">Settings</h1>
-        <p className="text-secondary-foreground text-lg">Manage your account and preferences.</p>
+        <p className="text-secondary-foreground text-sm md:text-lg">Manage your account and preferences.</p>
       </div>
 
-      <div className="flex gap-8">
+      <div className="flex flex-col md:flex-row gap-8">
         {/* Settings Sidebar */}
-        <div className="w-64 flex flex-col gap-2">
+        <div className="w-full md:w-64 flex flex-col gap-2 flex-shrink-0">
           <button onClick={() => setActiveTab("account")} className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold transition-colors ${activeTab === "account" ? "bg-primary text-white" : "text-secondary-foreground hover:bg-white/5 hover:text-white"}`}>
             <User size={20} /> Account
           </button>

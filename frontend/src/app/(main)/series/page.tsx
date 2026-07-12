@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { Play, Search, Star, Tv, ChevronDown, SlidersHorizontal, Plus } from "lucide-react"
+import { Play, Search, Star, Tv, ChevronDown, SlidersHorizontal, Plus, X } from "lucide-react"
 import Link from "next/link"
 import { api } from "@/lib/api"
 
@@ -33,8 +33,10 @@ export default function SeriesPage() {
   const [showSortDropdown, setShowSortDropdown] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadingSeries, setLoadingSeries] = useState(false)
+  const [showCategories, setShowCategories] = useState(false)
   const gridContainerRef = useRef<HTMLDivElement>(null)
   const isFirstLoadRef = useRef(true)
+
 
   const [providers, setProviders] = useState<any[]>([])
 
@@ -176,9 +178,9 @@ export default function SeriesPage() {
   }
 
   return (
-    <div className="flex h-full overflow-hidden w-full bg-background text-white">
+    <div className="flex h-full overflow-hidden w-full bg-background text-white relative">
       {/* Categories Sidebar */}
-      <div className="w-64 border-r border-white/10 bg-black/40 overflow-y-auto flex-shrink-0 flex flex-col">
+      <div className="hidden md:flex w-64 border-r border-white/10 bg-black/40 overflow-y-auto flex-shrink-0 flex-col">
         <div className="p-6 flex-shrink-0 border-b border-white/5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold tracking-tight text-white font-outfit">Series</h2>
@@ -224,19 +226,79 @@ export default function SeriesPage() {
         </div>
       </div>
 
+      {/* Mobile Categories Drawer Overlay */}
+      {showCategories && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden animate-in fade-in duration-200"
+            onClick={() => setShowCategories(false)}
+          />
+          <div className="fixed inset-y-0 left-0 w-64 bg-zinc-950 border-r border-white/10 z-50 p-6 flex flex-col md:hidden animate-in slide-in-from-left duration-300">
+            <div className="flex items-center justify-between mb-6 flex-shrink-0">
+              <h2 className="text-xl font-bold tracking-tight text-white font-outfit">Categories</h2>
+              <button onClick={() => setShowCategories(false)}>
+                <X size={20} className="text-zinc-400 hover:text-white" />
+              </button>
+            </div>
+            
+            {/* Category Search Input */}
+            <div className="relative mb-4 flex-shrink-0">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+              <input
+                type="text"
+                placeholder="Search categories..."
+                value={categoryQuery}
+                onChange={(e) => setCategoryQuery(e.target.value)}
+                className="w-full bg-zinc-900 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-xs text-white focus:outline-none"
+              />
+            </div>
+            
+            <div className="flex-1 overflow-y-auto space-y-1">
+              <button
+                onClick={() => { handleSelectCategory(null); setShowCategories(false); }}
+                className={`w-full text-left px-3 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-between ${!activeCategory ? "bg-primary text-white" : "text-zinc-400 hover:bg-white/5"}`}
+              >
+                <span>All Series</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-white/10">{totalSeriesCount}</span>
+              </button>
+              {filteredCategories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => { handleSelectCategory(cat); setShowCategories(false); }}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-between ${activeCategory?.id === cat.id ? "bg-primary text-white" : "text-zinc-400 hover:bg-white/5"}`}
+                >
+                  <span className="truncate pr-2">{cat.name}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 bg-white/10">{cat._count?.series || 0}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Series Grid */}
-      <div ref={gridContainerRef} className="flex-1 overflow-y-auto p-8 relative">
+      <div ref={gridContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-8 relative">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white font-outfit">{activeCategory?.name || "All Series"}</h1>
-            <p className="text-xs text-zinc-400 mt-1">
-              Showing {processedSeries.length} of {activeCategory ? activeCategory._count?.series || 0 : totalSeriesCount} series
-            </p>
+          <div className="flex items-center justify-between w-full md:w-auto">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white font-outfit">{activeCategory?.name || "All Series"}</h1>
+              <p className="text-xs text-zinc-400 mt-1">
+                Showing {processedSeries.length} of {activeCategory ? activeCategory._count?.series || 0 : totalSeriesCount} series
+              </p>
+            </div>
+            {/* Mobile Categories Toggle Button */}
+            <button 
+              onClick={() => setShowCategories(true)}
+              className="md:hidden bg-zinc-900 border border-white/10 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2"
+            >
+              <SlidersHorizontal size={14} />
+              <span>Categories</span>
+            </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
             {/* Scoped Search Box */}
-            <div className="relative flex-1 md:flex-initial min-w-[260px] md:min-w-[320px] group">
+            <div className="relative flex-1 w-full md:min-w-[320px] group">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none gap-2">
                 <Search className="h-4 w-4 text-zinc-400 group-focus-within:text-primary transition-colors flex-shrink-0" />
                 <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded max-w-[120px] truncate">
