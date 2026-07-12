@@ -60,6 +60,10 @@ class TranscodeCacheStream extends Readable {
     super.destroy(error);
     return this;
   }
+
+  getBufferedBytes(): number {
+    return this.totalBytes;
+  }
 }
 
 class TsDiagnosticsTransform extends Transform {
@@ -659,6 +663,32 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
 
     let cumulativeDurationSec = 0;
     let lastEofTime: number | null = null;
+    let activeResponseStream: any = null;
+    let dynamicCacheStream: TranscodeCacheStream | null = null;
+
+    const cacheChecker = setInterval(() => {
+      if (isClientDisconnected() || sink.writableEnded || sink.destroyed) {
+        clearInterval(cacheChecker);
+        return;
+      }
+
+      // Check current cache size of the active cache stream
+      const currentBufSize = dynamicCacheStream
+        ? dynamicCacheStream.getBufferedBytes()
+        : (singleCacheStream ? singleCacheStream.getBufferedBytes() : 0);
+
+      // Forceful caching watchdog: if the cache is low (less than 2MB) and we have an active stream,
+      // we forcefully destroy the active socket to trigger an immediate reconnect.
+      if (currentBufSize < 1024 * 1024 * 2 && activeResponseStream) {
+        this.logger.log(
+          `[CACHE_CHECKER][Channel:${channelId}] Cache size is low (${(currentBufSize / 1024).toFixed(1)} KB). ` +
+          `Forcefully checking stream and triggering immediate reconnect...`
+        );
+        try {
+          activeResponseStream.destroy();
+        } catch (_) {}
+      }
+    }, 1000);
 
     while (!isClientDisconnected() && !sink.writableEnded && !sink.destroyed) {
       if (singleFfmpegProcess && singleFfmpegProcess.killed) {
@@ -681,6 +711,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
             httpsAgent: isHttps ? keepAliveHttpsAgent : undefined,
           }).pipe(catchError(err => { throw err; }))
         );
+        activeResponseStream = response.data;
 
         this.logger.log(`[PROVIDER_HEADERS][Channel:${channelId}] Status ${response.status}. Headers: ${JSON.stringify(response.headers)}`);
         consecutiveErrors = 0; // reset
@@ -771,7 +802,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
             outputNode = inputNode;
           }
 
-          let dynamicCacheStream: TranscodeCacheStream | null = null;
+          dynamicCacheStream = null;
           if (outputNode) {
             if (transcodeType && useDynamicRestart) {
               dynamicCacheStream = new TranscodeCacheStream();
@@ -803,6 +834,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
               try { dynamicCacheStream.destroy(); } catch (_) {}
               dynamicCacheStream = null;
             }
+            activeResponseStream = null;
             try { response.data.unpipe(); } catch (_) {}
             try { if (tsDiagnostics) tsDiagnostics.unpipe(); } catch (_) {}
             try { if (outputNode) outputNode.unpipe(); } catch (_) {}
@@ -872,6 +904,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     if (singleCacheStream) {
       try { singleCacheStream.destroy(); } catch (_) {}
     }
+    clearInterval(cacheChecker);
 
     if (!sink.writableEnded && !sink.destroyed) sink.end();
     this.logger.log(`[STITCHER_STOP][Channel:${channelId}] Loop stopped. Bytes: ${totalBytesWritten}`);
