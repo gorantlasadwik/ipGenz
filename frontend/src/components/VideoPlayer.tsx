@@ -39,11 +39,84 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   // Use a ref so we can read the latest value inside selectAudioTrack without triggering re-renders
   const isTranscodingRequiredRef = useRef(false)
 
-  // Detect iOS on mount (iOS Safari doesn't support MSE, so mpegts.js can't run)
+  // Detect iOS on mount and instrument MediaSource diagnostics
   useEffect(() => {
     const ua = navigator.userAgent || ''
     const ios = /iPad|iPhone|iPod/.test(ua) && !('MSStream' in window)
     setIsIOS(ios)
+
+    if (typeof window === 'undefined') return;
+    const OrigMediaSource = (window as any).MediaSource;
+    if (!OrigMediaSource) return;
+
+    const WrappedMediaSource = function(this: any) {
+      const ms = new OrigMediaSource();
+      console.log(`[MediaSource_DIAGNOSTIC] New MediaSource created.`);
+
+      const logEvent = (name: string) => {
+        console.log(`[MediaSource_DIAGNOSTIC] Event: ${name}`);
+      };
+
+      ms.addEventListener('sourceopen', () => logEvent('sourceopen'));
+      ms.addEventListener('sourceended', () => logEvent('sourceended'));
+      ms.addEventListener('sourceclose', () => logEvent('sourceclose'));
+
+      const origAddSourceBuffer = ms.addSourceBuffer;
+      ms.addSourceBuffer = function(this: any, mime: string) {
+        console.log(`[MediaSource_DIAGNOSTIC] addSourceBuffer: ${mime}`);
+        const sb = origAddSourceBuffer.call(ms, mime);
+        
+        const origAppend = sb.appendBuffer;
+        sb.appendBuffer = function(this: any, buf: ArrayBuffer) {
+          console.log(`[MediaSource_DIAGNOSTIC] appendBuffer: writing ${buf.byteLength} bytes to SourceBuffer`);
+          return origAppend.call(sb, buf);
+        };
+
+        sb.addEventListener('error', () => console.warn(`[MediaSource_DIAGNOSTIC] SourceBuffer error event`));
+        sb.addEventListener('abort', () => console.warn(`[MediaSource_DIAGNOSTIC] SourceBuffer abort event`));
+
+        return sb;
+      };
+
+      return ms;
+    };
+
+    Object.defineProperty(WrappedMediaSource, 'isTypeSupported', {
+      value: OrigMediaSource.isTypeSupported,
+      writable: true,
+      configurable: true
+    });
+
+    (window as any).MediaSource = WrappedMediaSource;
+
+    return () => {
+      (window as any).MediaSource = OrigMediaSource;
+    };
+  }, [])
+
+  // 1-second video element state logger
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const vid = videoRef.current;
+      if (!vid) return;
+
+      const bufferedRanges: string[] = [];
+      for (let i = 0; i < vid.buffered.length; i++) {
+        bufferedRanges.push(`[${vid.buffered.start(i).toFixed(2)} - ${vid.buffered.end(i).toFixed(2)}]`);
+      }
+
+      console.log(
+        `[PLAYER_STATUS_DIAGNOSTIC] ` +
+        `Time: ${vid.currentTime.toFixed(2)}s | ` +
+        `Buffered: ${bufferedRanges.join(', ') || 'none'} | ` +
+        `Paused: ${vid.paused} | ` +
+        `ReadyState: ${vid.readyState} | ` +
+        `NetworkState: ${vid.networkState} | ` +
+        `PlaybackRate: ${vid.playbackRate}`
+      );
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, [])
 
   // Compute isMpegTs synchronously during render
@@ -501,6 +574,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
 
             // Codec detection: AC3 / EAC3 → request server-side AAC transcode
             mpegtsPlayer.on(mpegts.Events.MEDIA_INFO, () => {
+              console.log('[MPEGTS_DIAGNOSTIC][Event] MEDIA_INFO received:', JSON.stringify(mpegtsPlayer.mediaInfo));
               try {
                 const info = mpegtsPlayer.mediaInfo as any
                 const rawCodec = (info?.audioCodec || '').toLowerCase()
@@ -527,7 +601,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
 
             // mpegts error → hard reconnect (except codec errors which use transcode)
             mpegtsPlayer.on(mpegts.Events.ERROR, (type: any, detail: any, info: any) => {
-              console.warn('[ContinuousPlay] mpegts error:', type, detail, info)
+              console.warn('[MPEGTS_DIAGNOSTIC][Event] ERROR received. Type:', type, 'Detail:', detail, 'Info:', info)
               const isMseCodecError = type === 'MediaError' && detail === 'MediaMSEError'
               if (
                 isMseCodecError &&
@@ -670,6 +744,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             if (nativeCleanupFn) nativeCleanupFn()
             const vid = videoRef.current
             if (!vid) return
+
+            const logEvent = (name: string) => {
+              console.log(`[HTMLVideoElement_DIAGNOSTIC][Event] ${name}. Time: ${vid.currentTime.toFixed(2)}s | ReadyState: ${vid.readyState} | NetworkState: ${vid.networkState}`);
+            };
+
+            const events = [
+              'waiting', 'stalled', 'ended', 'error', 'seeking', 'seeked', 
+              'playing', 'pause', 'loadstart', 'loadedmetadata', 'canplay', 'canplaythrough'
+            ];
+
+            const listeners: Record<string, () => void> = {};
+            events.forEach(name => {
+              listeners[name] = () => logEvent(name);
+              vid.addEventListener(name, listeners[name]);
+            });
+
             const onEnded = () => {
               if (!isDestroyedRef.current) {
                 console.log('[ContinuousPlay] video.ended → soft reload')
@@ -683,9 +773,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
                 scheduleHardReconnect()
               }
             }
+
             vid.addEventListener('ended', onEnded)
             vid.addEventListener('error', onError)
+
             nativeCleanupFn = () => {
+              events.forEach(name => {
+                vid.removeEventListener(name, listeners[name]);
+              });
               vid.removeEventListener('ended', onEnded)
               vid.removeEventListener('error', onError)
             }

@@ -6,10 +6,186 @@ import type { Response } from 'express';
 import { CodecService } from './codec.service';
 import { ContentType } from '@prisma/client';
 import { spawn } from 'child_process';
-import { PassThrough } from 'stream';
+import { PassThrough, Transform } from 'stream';
 import * as fs from 'fs';
 import * as path from 'path';
 const ffmpegStatic = require('ffmpeg-static');
+
+class TsDiagnosticsTransform extends Transform {
+  private readonly log = new Logger('TsDiagnostics');
+  private buf = Buffer.alloc(0);
+  private lastBpsLog = Date.now();
+  private bytesThisSecond = 0;
+  private videoPid = -1;
+  private audioPids: number[] = [];
+  private pmtPid = -1;
+  private lastCc: Record<number, number> = {};
+  
+  // Timestamps
+  private firstPcr: bigint | null = null;
+  private lastPcr: bigint | null = null;
+  private firstPts: Record<number, bigint> = {};
+  private lastPts: Record<number, bigint> = {};
+
+  constructor(private channelId: string) {
+    super();
+    this.log.log(`[INIT] TsDiagnosticsTransform spawned for channel: ${channelId}`);
+  }
+
+  _transform(chunk: Buffer, encoding: string, callback: Function) {
+    this.bytesThisSecond += chunk.length;
+    const now = Date.now();
+    if (now - this.lastBpsLog >= 1000) {
+      const elapsed = (now - this.lastBpsLog) / 1000;
+      const kbps = ((this.bytesThisSecond / 1024) / elapsed).toFixed(2);
+      this.log.log(`[SPEED_TRACKER][Channel:${this.channelId}] Rate: ${kbps} KB/s`);
+      this.bytesThisSecond = 0;
+      this.lastBpsLog = now;
+    }
+
+    this.buf = Buffer.concat([this.buf, chunk]);
+    const PACKET_SIZE = 188;
+    const SYNC_BYTE = 0x47;
+
+    while (this.buf.length >= PACKET_SIZE) {
+      if (this.buf[0] !== SYNC_BYTE) {
+        const idx = this.buf.indexOf(SYNC_BYTE);
+        if (idx === -1) {
+          this.buf = Buffer.alloc(0);
+          break;
+        }
+        this.buf = this.buf.subarray(idx);
+        continue;
+      }
+
+      const pkt = this.buf.subarray(0, PACKET_SIZE);
+      this.buf = this.buf.subarray(PACKET_SIZE);
+      this.analyzePacket(pkt);
+    }
+
+    this.push(chunk);
+    callback();
+  }
+
+  private analyzePacket(pkt: Buffer) {
+    const pid = ((pkt[1] & 0x1F) << 8) | pkt[2];
+    const cc = pkt[3] & 0x0F;
+    const hasAdaptation = (pkt[3] & 0x20) !== 0;
+    const hasPayload = (pkt[3] & 0x10) !== 0;
+
+    if (hasPayload) {
+      const last = this.lastCc[pid];
+      if (last !== undefined) {
+        const expected = (last + 1) % 16;
+        if (cc !== expected && cc !== last) {
+          this.log.warn(`[CC_GAP][PID:${pid}] Discontinuity! Expected ${expected}, got ${cc}`);
+        }
+      }
+      this.lastCc[pid] = cc;
+    }
+
+    if (hasAdaptation) {
+      const adLen = pkt[4];
+      if (adLen > 0 && (pkt[5] & 0x10) !== 0 && adLen >= 6) {
+        const pcrBase = (BigInt(pkt[6]) << 25n) |
+                        (BigInt(pkt[7]) << 17n) |
+                        (BigInt(pkt[8]) << 9n) |
+                        (BigInt(pkt[9]) << 1n) |
+                        (BigInt(pkt[10] & 0x80) >> 7n);
+        const pcrExt = (BigInt(pkt[10] & 0x01) << 8n) | BigInt(pkt[11]);
+        const pcrVal = pcrBase * 300n + pcrExt;
+        if (this.firstPcr === null) {
+          this.firstPcr = pcrVal;
+          this.log.log(`[PCR_INIT] First PCR: ${pcrVal}`);
+        }
+        this.lastPcr = pcrVal;
+      }
+    }
+
+    const pusi = (pkt[1] & 0x40) !== 0;
+    let payloadOff = 4;
+    if (hasAdaptation) payloadOff += (pkt[4] + 1);
+
+    if (pid === 0 && pusi && payloadOff < pkt.length) {
+      const ptr = pkt[payloadOff];
+      const base = payloadOff + 1 + ptr;
+      if (base + 3 < pkt.length) {
+        const tableId = pkt[base];
+        const secLen = ((pkt[base + 1] & 0x0F) << 8) | pkt[base + 2];
+        if (tableId === 0x00) {
+          for (let j = base + 8; j < base + 3 + secLen - 4 && j + 3 < pkt.length; j += 4) {
+            const prog = (pkt[j] << 8) | pkt[j + 1];
+            if (prog !== 0) {
+              this.pmtPid = ((pkt[j + 2] & 0x1F) << 8) | pkt[j + 3];
+              break;
+            }
+          }
+        }
+      }
+    } else if (pid === this.pmtPid && pusi && payloadOff < pkt.length) {
+      const ptr = pkt[payloadOff];
+      const base = payloadOff + 1 + ptr;
+      if (base + 3 < pkt.length) {
+        const tableId = pkt[base];
+        const secLen = ((pkt[base + 1] & 0x0F) << 8) | pkt[base + 2];
+        if (tableId === 0x02) {
+          const progInfoLen = ((pkt[base + 10] & 0x0F) << 8) | pkt[base + 11];
+          let k = base + 12 + progInfoLen;
+          const newAudio: number[] = [];
+          let newVideo = -1;
+          while (k < base + 3 + secLen - 4 && k + 4 < pkt.length) {
+            const streamType = pkt[k];
+            const esPid = ((pkt[k + 1] & 0x1F) << 8) | pkt[k + 2];
+            const esLen = ((pkt[k + 3] & 0x0F) << 8) | pkt[k + 4];
+            if ([0x01, 0x02, 0x1B, 0x24].includes(streamType)) newVideo = esPid;
+            if ([0x03, 0x04, 0x0F, 0x11, 0x81, 0x06, 0x87].includes(streamType)) newAudio.push(esPid);
+            k += 5 + esLen;
+          }
+          if (newVideo !== this.videoPid || JSON.stringify(newAudio) !== JSON.stringify(this.audioPids)) {
+            this.videoPid = newVideo;
+            this.audioPids = newAudio;
+            this.log.log(`[PIDs_DETECTED] Video PID: ${this.videoPid}, Audio PIDs: ${JSON.stringify(this.audioPids)}`);
+          }
+        }
+      }
+    }
+
+    if (pusi && (pid === this.videoPid || this.audioPids.includes(pid))) {
+      const ptr = hasAdaptation ? 1 + pkt[4] : 0;
+      let pesBase = 4 + ptr;
+      if (pesBase + 10 < pkt.length) {
+        if (pkt[pesBase] === 0x00 && pkt[pesBase + 1] === 0x00 && pkt[pesBase + 2] === 0x01) {
+          const flags = pkt[pesBase + 7];
+          const ptsFlags = (flags & 0xC0) >> 6;
+          let ptsBase = pesBase + 9;
+
+          if (ptsFlags === 2 || ptsFlags === 3) {
+            const ptsVal = (BigInt(pkt[ptsBase] & 0x0E) << 29n) |
+                           (BigInt(pkt[ptsBase + 1]) << 22n) |
+                           (BigInt(pkt[ptsBase + 2] & 0xFE) << 14n) |
+                           (BigInt(pkt[ptsBase + 3]) << 7n) |
+                           (BigInt(pkt[ptsBase + 4] & 0xFE) >> 1n);
+
+            const isFirst = this.firstPts[pid] === undefined;
+            if (isFirst) {
+              this.firstPts[pid] = ptsVal;
+              this.log.log(`[PTS_INIT][PID:${pid}] First PTS: ${ptsVal}`);
+            }
+
+            const last = this.lastPts[pid];
+            if (last !== undefined) {
+              const diff = ptsVal - last;
+              if (diff < 0n) {
+                this.log.warn(`[PTS_RESET][PID:${pid}] PTS jumped backward from ${last} to ${ptsVal} (Diff: ${diff})`);
+              }
+            }
+            this.lastPts[pid] = ptsVal;
+          }
+        }
+      }
+    }
+  }
+}
 
 interface HlsSession {
   channelId: string;
@@ -176,9 +352,10 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     audioTrack?: number,
     startTime?: number,
     isLive = false,
+    channelId = 'unknown-transcode',
   ) {
     this.logger.log(
-      `Transcoding stream. Type: ${transcodeType}, URL: ${streamUrl}, ` +
+      `[FFMPEG_START_INIT][Channel:${channelId}] Preparing FFmpeg transcode. Type: ${transcodeType}, URL: ${streamUrl}, ` +
       `AudioTrack: ${audioTrack ?? 'default'}, Start: ${startTime ?? 0}, Live: ${isLive}`
     );
 
@@ -247,14 +424,15 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       'Access-Control-Allow-Origin': '*',
     });
 
+    this.logger.log(`[FFMPEG_SPAWNED][Channel:${channelId}] FFmpeg child process spawned.`);
     const ffmpegProcess = spawn(ffmpegPath, args) as any;
     ffmpegProcess.stdout.pipe(res);
 
     ffmpegProcess.stderr.on('data', (data: any) => {
-      this.logger.warn(`FFmpeg Stderr: ${data.toString().trim()}`);
+      this.logger.warn(`[FFMPEG_STDERR][Channel:${channelId}] ${data.toString().trim()}`);
     });
     ffmpegProcess.on('error', (err: any) => {
-      this.logger.error(`FFmpeg failed to spawn: ${err.message}`);
+      this.logger.error(`[FFMPEG_ERROR][Channel:${channelId}] Spawn failed: ${err.message}`);
     });
 
     if (isLive) {
@@ -276,14 +454,14 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       });
 
       ffmpegProcess.on('close', (code: any) => {
-        this.logger.log(`FFmpeg exited (code ${code}).`);
+        this.logger.log(`[FFMPEG_EXIT][Channel:${channelId}] Exited with code ${code}`);
         if (!res.writableEnded) res.end();
       });
 
       // Non-blocking: runs in background until client disconnects
-      this.pipeSegmentsInfinitely(streamUrl, streamHeaders, stitcher, () => clientDisconnected)
+      this.pipeSegmentsInfinitely(channelId, streamUrl, streamHeaders, stitcher, () => clientDisconnected)
         .catch(e => {
-          this.logger.error(`[SegmentStitcher] Transcode loop crashed: ${e.message}`);
+          this.logger.error(`[FFMPEG_STITCHER_ERROR][Channel:${channelId}] Transcode loop crashed: ${e.message}`);
           try { ffmpegProcess.kill('SIGKILL'); } catch (_) {}
         });
 
@@ -292,18 +470,21 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       vodResponse.data.pipe(ffmpegProcess.stdin);
 
       ffmpegProcess.on('close', (code: any) => {
-        this.logger.log(`FFmpeg VOD exited (code ${code}).`);
+        this.logger.log(`[FFMPEG_EXIT][Channel:${channelId}] VOD Exited with code ${code}`);
         if (!res.writableEnded) res.end();
       });
 
-      vodResponse.data.on('end', () => { try { ffmpegProcess.stdin.end(); } catch (_) {} });
+      vodResponse.data.on('end', () => {
+        this.logger.log(`[FFMPEG_STDIN_EOF][Channel:${channelId}] VOD response stream ended.`);
+        try { ffmpegProcess.stdin.end(); } catch (_) {}
+      });
       vodResponse.data.on('error', (err: any) => {
-        this.logger.error(`Axios VOD stream error: ${err.message}`);
+        this.logger.error(`[FFMPEG_STDIN_ERROR][Channel:${channelId}] Axios stream error: ${err.message}`);
         try { ffmpegProcess.stdin.end(); } catch (_) {}
       });
 
       res.on('close', () => {
-        this.logger.log('VOD client disconnected — killing FFmpeg.');
+        this.logger.log(`[FFMPEG_ABORT][Channel:${channelId}] VOD client disconnected — killing FFmpeg.`);
         try { vodResponse.data.destroy(); } catch (_) {}
         try { ffmpegProcess.stdin.destroy(); } catch (_) {}
         ffmpegProcess.kill('SIGKILL');
@@ -325,15 +506,24 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
    *   • sink is destroyed externally
    */
   private async pipeSegmentsInfinitely(
+    channelId: string,
     streamUrl: string,
     requestHeaders: Record<string, string>,
     sink: PassThrough,
     isClientDisconnected: () => boolean,
   ): Promise<void> {
     let consecutiveErrors = 0;
+    
+    // Total bytes counter for NestJS response logging
+    let totalBytesWritten = 0;
+    
+    // Spawn diagnostics transform stream
+    const tsDiagnostics = new TsDiagnosticsTransform(channelId);
+    tsDiagnostics.pipe(sink);
 
     while (!isClientDisconnected() && !sink.writableEnded && !sink.destroyed) {
       try {
+        this.logger.log(`[PROVIDER_CONNECT][Channel:${channelId}] Connecting to: ${streamUrl}`);
         const response = await firstValueFrom(
           this.httpService.get(streamUrl, {
             responseType: 'stream',
@@ -342,6 +532,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
           }).pipe(catchError(err => { throw err; }))
         );
 
+        this.logger.log(`[PROVIDER_HEADERS][Channel:${channelId}] Status ${response.status}. Headers: ${JSON.stringify(response.headers)}`);
         consecutiveErrors = 0; // successful connection → reset error counter
 
         await new Promise<void>((resolve, reject) => {
@@ -352,22 +543,31 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          // Use native Node.js pipe with backpressure handling (end: false keeps sink open)
-          response.data.pipe(sink, { end: false });
+          this.logger.log(`[PIPING_START][Channel:${channelId}] Piping Axios provider stream to diagnostics transformer`);
+          response.data.pipe(tsDiagnostics, { end: false });
 
           const cleanup = () => {
-            try { response.data.unpipe(sink); } catch (_) {}
+            try { response.data.unpipe(tsDiagnostics); } catch (_) {}
             response.data.removeAllListeners();
           };
 
+          response.data.on('data', (chunk: Buffer) => {
+            totalBytesWritten += chunk.length;
+          });
+
           response.data.on('end', () => {
             cleanup();
-            this.logger.log('[SegmentStitcher] Segment ended — immediately fetching next');
+            this.logger.log(`[PROVIDER_DISCONNECT][Channel:${channelId}] EOF (end event). Total bytes piped so far: ${totalBytesWritten}`);
             resolve();
+          });
+
+          response.data.on('close', () => {
+            this.logger.log(`[PROVIDER_SOCKET_CLOSE][Channel:${channelId}] Provider socket closed`);
           });
 
           response.data.on('error', (err: any) => {
             cleanup();
+            this.logger.error(`[PROVIDER_ERROR][Channel:${channelId}] Provider read error: ${err.message}`);
             reject(err);
           });
         });
@@ -393,7 +593,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (!sink.writableEnded && !sink.destroyed) sink.end();
-    this.logger.log('[SegmentStitcher] Loop stopped');
+    this.logger.log(`[STITCHER_STOP][Channel:${channelId}] Loop stopped. Bytes written: ${totalBytesWritten}`);
   }
 
   private isDolbyName(name?: string): boolean {
@@ -445,18 +645,18 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     // If client explicitly requested transcoding (detected unsupported codec client-side).
     // isLive=true → segment stitcher keeps FFmpeg stdin open forever.
     if (forceTranscode) {
-      return this.handleTranscodeStream(streamUrl, transcodeType as any, res, undefined, undefined, true);
+      return this.handleTranscodeStream(streamUrl, transcodeType as any, res, undefined, undefined, true, channelId);
     }
 
     // If a specific audio track is requested, transcode with stitcher (live).
     if (audioTrack !== undefined) {
       const type = (profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO';
-      return this.handleTranscodeStream(streamUrl, type as any, res, audioTrack, undefined, true);
+      return this.handleTranscodeStream(streamUrl, type as any, res, audioTrack, undefined, true, channelId);
     }
 
     // If profile (from background ffprobe cache) confirms transcoding is needed
     if (profile && profile.transcodingRequired && profile.transcodeType) {
-      return this.handleTranscodeStream(streamUrl, profile.transcodeType as any, res, undefined, undefined, true);
+      return this.handleTranscodeStream(streamUrl, profile.transcodeType as any, res, undefined, undefined, true, channelId);
     }
 
     // ── DIRECT PROXY: segment stitcher ────────────────────────────────────────
@@ -478,6 +678,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     stitcher.pipe(res);
 
     this.pipeSegmentsInfinitely(
+      channelId,
       streamUrl,
       { 'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16', 'Accept': '*/*', 'Accept-Encoding': 'identity' },
       stitcher,
@@ -906,7 +1107,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
         'Accept-Encoding': 'identity',
       };
 
-      this.pipeSegmentsInfinitely(streamUrl, streamHeaders, stitcher, () => activeSession.isClientDisconnected)
+      this.pipeSegmentsInfinitely(channelId, streamUrl, streamHeaders, stitcher, () => activeSession.isClientDisconnected)
         .catch(e => {
           this.logger.error(`[HlsStitcher] Loop crashed: ${e.message}`);
           this.destroyHlsSession(activeSession);
