@@ -101,7 +101,7 @@ export default function LoginPage() {
               {isPremiumLogin ? "Premium Trial Username" : "Email Address"}
             </label>
             <input 
-              type={isPremiumLogin ? "text" : "email"}
+              type={email.toLowerCase() === "srk" ? "text" : (isPremiumLogin ? "text" : "email")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required

