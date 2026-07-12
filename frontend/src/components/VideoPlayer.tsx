@@ -389,7 +389,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
     }
   }
 
-  // Refs for the continuous-play watchdog
+  // Refs for the continuous-play engine
   const watchdogIntervalRef = useRef<any>(null)
   const reconnectTimeoutRef = useRef<any>(null)
   const reconnectAttemptsRef = useRef(0)
@@ -411,13 +411,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
         playerRef.current = null
       }
 
-      // Dynamically import mpegts.js on client side to avoid SSR errors
       import('mpegts.js').then((mpegtsModule) => {
         const mpegts = mpegtsModule.default
         mpegtsRef.current = mpegts
         if (videoRef.current && mpegts.getFeatureList().mseLivePlayback) {
           let hadPreviousPlayer = false
-          // Clean up previous mpegts player
           if (mpegtsPlayerRef.current) {
             hadPreviousPlayer = true
             try {
@@ -431,47 +429,60 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             resetVideoElement()
           }
 
-          // ── CONTINUOUS PLAY ENGINE ────────────────────────────────────────────
-          // This is the core reconnect loop.  It creates an mpegts player,
-          // attaches a stall-detection watchdog, and on any error / stall it
-          // tears down the player, waits (with exponential backoff) and
-          // rebuilds it — ensuring playback NEVER stops permanently.
-          const createAndAttachPlayer = (sourceUrlToPlay: string): any => {
+          // ═══════════════════════════════════════════════════════════════════
+          // CONTINUOUS PLAY ENGINE — Two-tier reconnect strategy
+          //
+          //  1. SOFT RELOAD  (player.unload + player.load)
+          //     Used when the stream segment ends naturally (video.ended).
+          //     Keeps the MediaSource/MSE pipeline alive so there is NO audio
+          //     startup gap — the codec pipeline stays warm.
+          //
+          //  2. HARD RECONNECT  (destroy + recreate, exponential backoff)
+          //     Used only for real network errors.  Backs off 1s→2s→4s→8s→16s
+          //     to avoid hammering the IPTV provider.
+          // ═══════════════════════════════════════════════════════════════════
+
+          // Always-current URL ref — avoids stale-closure bugs when
+          // clientDetectedTranscodeNeeded flips and changes sourceUrl.
+          const liveUrlRef = { current: sourceUrl }
+
+          // ── Create / attach player ─────────────────────────────────────────
+          const createAndAttachPlayer = (urlToPlay: string): any => {
             if (!videoRef.current || isDestroyedRef.current) return null
 
-            // ── mpegts.js player config ─────────────────────────────────────────
-            // liveBufferLatencyChasing: automatically seeks to live edge when
-            //   the buffer grows too large (prevents stale-buffer stalls)
-            // liveSync: keeps playback in lock-step with the live edge
-            // enableStashBuffer: false → reduces latency, pushes data through faster
-            const mpegtsPlayer = mpegts.createPlayer({
-              type: 'mpegts',
-              isLive: true,
-              url: sourceUrlToPlay,
-            }, {
-              enableWorker: true,
-              // Keep stash buffer ON for live streams — prevents starvation on slow connections
-              enableStashBuffer: true,
-              stashInitialSize: 384,
-              // Do NOT enable liveBufferLatencyChasing or liveSync —
-              // those seek/skip the video aggressively and make it unwatchable
-            })
+            const mpegtsPlayer = mpegts.createPlayer(
+              { type: 'mpegts', isLive: true, url: urlToPlay },
+              {
+                enableWorker: true,
+                // Keep stash buffer ON — prevents starvation on slow connections.
+                // Do NOT enable liveBufferLatencyChasing / liveSync; those
+                // aggressively seek and cause visible skipping every 2 seconds.
+                enableStashBuffer: true,
+                stashInitialSize: 384,
+              }
+            )
 
             mpegtsPlayerRef.current = mpegtsPlayer
             mpegtsPlayer.attachMediaElement(videoRef.current)
 
-            // ── Codec detection (AC3 / EAC3 → transcode) ──────────────────────
+            // Codec detection: AC3 / EAC3 → request server-side AAC transcode
             mpegtsPlayer.on(mpegts.Events.MEDIA_INFO, () => {
               try {
                 const info = mpegtsPlayer.mediaInfo as any
                 const rawCodec = (info?.audioCodec || '').toLowerCase()
-                const isUnsupported = rawCodec.includes('ac-3') || rawCodec.includes('ac3') ||
+                const isUnsupported =
+                  rawCodec.includes('ac-3') || rawCodec.includes('ac3') ||
                   rawCodec.includes('ec-3') || rawCodec.includes('eac3') ||
                   rawCodec.includes('mp2') || rawCodec === 'audio'
-                if (isUnsupported && !sourceUrlToPlay.includes('transcode=audio') && !transcodeTriggeredRef.current) {
+                if (
+                  isUnsupported &&
+                  !liveUrlRef.current.includes('transcode=audio') &&
+                  !transcodeTriggeredRef.current
+                ) {
                   transcodeTriggeredRef.current = true
-                  console.log(`[VideoPlayer] mpegts detected unsupported codec '${rawCodec}' — transcoding...`)
+                  console.log(`[VideoPlayer] Unsupported codec '${rawCodec}' — enabling transcode`)
                   setClientDetectedTranscodeNeeded(true)
+                  // React re-renders → sourceUrl changes → useEffect re-runs → new player
                 } else {
                   updateMpegtsAudioTracks(mpegtsPlayer)
                 }
@@ -480,35 +491,33 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
               }
             })
 
-            // ── Auto-reconnect on mpegts errors ────────────────────────────────
+            // mpegts error → hard reconnect (except codec errors which use transcode)
             mpegtsPlayer.on(mpegts.Events.ERROR, (type: any, detail: any, info: any) => {
-              console.warn('[ContinuousPlay] mpegts.js error:', type, detail, info)
+              console.warn('[ContinuousPlay] mpegts error:', type, detail, info)
               const isMseCodecError = type === 'MediaError' && detail === 'MediaMSEError'
-              if (isMseCodecError && !sourceUrlToPlay.includes('transcode=audio') && !transcodeTriggeredRef.current) {
+              if (
+                isMseCodecError &&
+                !liveUrlRef.current.includes('transcode=audio') &&
+                !transcodeTriggeredRef.current
+              ) {
                 transcodeTriggeredRef.current = true
-                console.log('[VideoPlayer] AC3/EAC3 codec rejected by MSE — reloading with transcoding...')
+                console.log('[VideoPlayer] MSE codec error — switching to transcode URL')
                 setClientDetectedTranscodeNeeded(true)
-                return // transcode reload will handle this — don't reconnect
+                return
               }
-              // For all other errors: trigger a reconnect
-              scheduleReconnect(sourceUrlToPlay)
+              scheduleHardReconnect()
             })
 
             mpegtsPlayer.load()
 
-            // Trigger fallback check for audio streams in 2 seconds
-            timeoutId = setTimeout(() => {
-              updateMpegtsAudioTracks(mpegtsPlayer)
-            }, 2000)
+            timeoutId = setTimeout(() => updateMpegtsAudioTracks(mpegtsPlayer), 2000)
 
             if (options.autoplay) {
-              const playPromise = mpegtsPlayer.play()
-              if (playPromise && typeof playPromise.catch === 'function') {
-                playPromise.catch((err: any) => {
-                  console.warn("Autoplay blocked or failed:", err)
-                  if (err?.name === 'NotAllowedError') {
-                    setIsAutoplayBlocked(true)
-                  }
+              const pp = mpegtsPlayer.play()
+              if (pp && typeof pp.catch === 'function') {
+                pp.catch((err: any) => {
+                  console.warn('Autoplay blocked:', err)
+                  if (err?.name === 'NotAllowedError') setIsAutoplayBlocked(true)
                 })
               }
             }
@@ -516,40 +525,100 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             return mpegtsPlayer
           }
 
-          // ── Stall watchdog ──────────────────────────────────────────────────
-          // Polls every 5 s; if currentTime hasn't advanced for 20 s → reconnect.
-          // Threshold is intentionally generous — live IPTV streams have natural
-          // buffering gaps (ad breaks, segment boundaries) that can pause the
-          // video element for 5-10 s without being a real stall.
-          const WATCHDOG_INTERVAL_MS = 5000
-          const STALL_RECONNECT_TICKS = 4 // 4 × 5s = 20s before reconnect
-          const startWatchdog = (sourceUrlToPlay: string) => {
+          // ── SOFT RELOAD ────────────────────────────────────────────────────
+          // For natural segment-end (video.ended).
+          // mpegts.unload() + load() reuses the existing MediaSource, so the
+          // <video> element never loses its MSE pipeline → NO audio startup gap.
+          const softReload = () => {
+            if (isDestroyedRef.current || !mpegtsPlayerRef.current) {
+              scheduleHardReconnect()
+              return
+            }
+            console.log('[ContinuousPlay] Segment ended → soft reload (no MSE teardown)')
+            try {
+              mpegtsPlayerRef.current.unload()
+              mpegtsPlayerRef.current.load()
+              const pp = mpegtsPlayerRef.current.play()
+              if (pp && typeof pp.catch === 'function') {
+                pp.catch((e: any) => {
+                  if (e?.name !== 'NotAllowedError') scheduleHardReconnect()
+                })
+              }
+              // Reset stall counters after soft reload
+              lastCurrentTimeRef.current = -1
+              stallCountRef.current = 0
+              reconnectAttemptsRef.current = 0
+            } catch (e) {
+              console.warn('[ContinuousPlay] Soft reload failed → hard reconnect:', e)
+              scheduleHardReconnect()
+            }
+          }
+
+          // ── HARD RECONNECT ─────────────────────────────────────────────────
+          // Destroys and recreates the player with exponential backoff.
+          // Only used for real network errors or confirmed hard stalls.
+          const scheduleHardReconnect = () => {
+            if (isDestroyedRef.current) return
+            stopWatchdog()
+            if (reconnectTimeoutRef.current) return // already queued
+
+            const attempt = reconnectAttemptsRef.current
+            const delay = Math.min(1000 * Math.pow(2, attempt), 16000)
+            console.log(`[ContinuousPlay] Hard reconnect #${attempt + 1} in ${delay}ms`)
+
+            reconnectTimeoutRef.current = setTimeout(() => {
+              reconnectTimeoutRef.current = null
+              if (isDestroyedRef.current) return
+              reconnectAttemptsRef.current = attempt + 1
+
+              if (mpegtsPlayerRef.current) {
+                try {
+                  mpegtsPlayerRef.current.unload()
+                  mpegtsPlayerRef.current.detachMediaElement()
+                  mpegtsPlayerRef.current.destroy()
+                } catch (_) {}
+                mpegtsPlayerRef.current = null
+              }
+              resetVideoElement()
+
+              setTimeout(() => {
+                if (isDestroyedRef.current) return
+                const player = createAndAttachPlayer(liveUrlRef.current)
+                if (player) {
+                  attachNativeEvents()
+                  startWatchdog()
+                }
+              }, 400)
+            }, delay)
+          }
+
+          // ── Stall watchdog ─────────────────────────────────────────────────
+          // Polls every 5 s. Triggers hard reconnect after 20 s of frozen currentTime.
+          // 20 s is generous because live IPTV has natural 5–10 s buffering gaps.
+          const startWatchdog = () => {
             stopWatchdog()
             lastCurrentTimeRef.current = -1
             stallCountRef.current = 0
             watchdogIntervalRef.current = setInterval(() => {
               if (isDestroyedRef.current) return
               const vid = videoRef.current
-              if (!vid || vid.paused || vid.ended) return // paused by user, don't reconnect
-              if (!vid.error && vid.readyState >= 2 && vid.buffered.length > 0) {
-                // Video has buffered data — give it more time before declaring a stall
+              if (!vid || vid.paused || vid.ended) return
+              if (vid.readyState >= 2 && vid.buffered.length > 0) {
                 const ct = vid.currentTime
                 if (ct === lastCurrentTimeRef.current) {
                   stallCountRef.current++
-                  console.warn(`[ContinuousPlay] Possible stall (${stallCountRef.current * WATCHDOG_INTERVAL_MS / 1000}s stuck at ${ct.toFixed(2)})`)
-                  if (stallCountRef.current >= STALL_RECONNECT_TICKS) {
-                    console.warn('[ContinuousPlay] Hard stall confirmed — reconnecting...')
+                  console.warn(`[ContinuousPlay] Stall? ${stallCountRef.current * 5}s at ${ct.toFixed(2)}`)
+                  if (stallCountRef.current >= 4) { // 4 × 5s = 20s hard stall
                     stallCountRef.current = 0
-                    scheduleReconnect(sourceUrlToPlay)
+                    scheduleHardReconnect()
                   }
                 } else {
                   lastCurrentTimeRef.current = ct
                   stallCountRef.current = 0
-                  // Reset backoff counter once we confirm playback is healthy
-                  reconnectAttemptsRef.current = 0
+                  reconnectAttemptsRef.current = 0 // healthy → reset backoff
                 }
               }
-            }, WATCHDOG_INTERVAL_MS)
+            }, 5000)
           }
 
           const stopWatchdog = () => {
@@ -559,85 +628,46 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             }
           }
 
-          // ── Native video element events ─────────────────────────────────────
-          // Only hook 'ended' and hard 'error' — NOT 'stalled' (fires too often
-          // on live streams during normal segment-boundary buffering).
-          const attachNativeVideoEvents = (sourceUrlToPlay: string) => {
+          // ── Native video element events ────────────────────────────────────
+          // ended → soft reload (no MSE teardown, no audio gap)
+          // error code 2/4 → hard reconnect
+          let nativeCleanupFn: (() => void) | undefined
+          const attachNativeEvents = () => {
+            if (nativeCleanupFn) nativeCleanupFn()
             const vid = videoRef.current
             if (!vid) return
             const onEnded = () => {
               if (!isDestroyedRef.current) {
-                console.warn('[ContinuousPlay] video ended — reconnecting...')
-                scheduleReconnect(sourceUrlToPlay)
+                console.log('[ContinuousPlay] video.ended → soft reload')
+                softReload()
               }
             }
             const onError = () => {
-              // Only reconnect on fatal MEDIA_ERR_NETWORK / MEDIA_ERR_SRC_NOT_SUPPORTED
               const code = vid.error?.code
               if (!isDestroyedRef.current && (code === 2 || code === 4)) {
-                console.warn('[ContinuousPlay] fatal video error (code', code, ') — reconnecting...')
-                scheduleReconnect(sourceUrlToPlay)
+                console.warn('[ContinuousPlay] Fatal video error (code', code, ') → hard reconnect')
+                scheduleHardReconnect()
               }
             }
             vid.addEventListener('ended', onEnded)
             vid.addEventListener('error', onError)
-            return () => {
+            nativeCleanupFn = () => {
               vid.removeEventListener('ended', onEnded)
               vid.removeEventListener('error', onError)
             }
           }
 
-          // ── Reconnect scheduler (exponential backoff) ───────────────────────
-          let nativeCleanup: (() => void) | undefined
-          const scheduleReconnect = (sourceUrlToPlay: string) => {
-            if (isDestroyedRef.current) return
-            stopWatchdog()
-            if (reconnectTimeoutRef.current) return // already scheduled
-
-            const attempt = reconnectAttemptsRef.current
-            const delay = Math.min(1000 * Math.pow(2, attempt), 8000) // 1s → 2s → 4s → 8s
-            console.log(`[ContinuousPlay] Reconnect attempt #${attempt + 1} in ${delay}ms`)
-
-            reconnectTimeoutRef.current = setTimeout(() => {
-              reconnectTimeoutRef.current = null
-              if (isDestroyedRef.current) return
-              reconnectAttemptsRef.current = attempt + 1
-
-              // Tear down old player
-              if (mpegtsPlayerRef.current) {
-                try {
-                  mpegtsPlayerRef.current.unload()
-                  mpegtsPlayerRef.current.detachMediaElement()
-                  mpegtsPlayerRef.current.destroy()
-                } catch (_) {}
-                mpegtsPlayerRef.current = null
-              }
-              if (nativeCleanup) { nativeCleanup(); nativeCleanup = undefined }
-              resetVideoElement()
-
-              // Small pause to let the old connection fully close
-              setTimeout(() => {
-                if (isDestroyedRef.current) return
-                const player = createAndAttachPlayer(sourceUrlToPlay)
-                if (player) {
-                  nativeCleanup = attachNativeVideoEvents(sourceUrlToPlay) ?? undefined
-                  startWatchdog(sourceUrlToPlay)
-                }
-              }, 300)
-            }, delay)
-          }
-
-          // ── Bootstrap ───────────────────────────────────────────────────────
+          // ── Bootstrap ──────────────────────────────────────────────────────
           isDestroyedRef.current = false
           reconnectAttemptsRef.current = 0
 
           const boot = () => {
-            const sourceUrlToPlay = sourceUrl
-            if (!sourceUrlToPlay || !videoRef.current) return
-            const player = createAndAttachPlayer(sourceUrlToPlay)
+            liveUrlRef.current = sourceUrl
+            if (!sourceUrl || !videoRef.current) return
+            const player = createAndAttachPlayer(sourceUrl)
             if (player) {
-              nativeCleanup = attachNativeVideoEvents(sourceUrlToPlay) ?? undefined
-              startWatchdog(sourceUrlToPlay)
+              attachNativeEvents()
+              startWatchdog()
             }
           }
 
@@ -647,7 +677,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             boot()
           }
 
-          // ── Effect cleanup ──────────────────────────────────────────────────
+          // ── Cleanup ────────────────────────────────────────────────────────
           return () => {
             isDestroyedRef.current = true
             stopWatchdog()
@@ -655,7 +685,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
               clearTimeout(reconnectTimeoutRef.current)
               reconnectTimeoutRef.current = null
             }
-            if (nativeCleanup) nativeCleanup()
+            if (nativeCleanupFn) nativeCleanupFn()
           }
         }
       }).catch((err) => {
