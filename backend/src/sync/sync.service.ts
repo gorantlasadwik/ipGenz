@@ -73,13 +73,26 @@ export class SyncService {
     };
 
     try {
-      // Fetch data from adapter first
-      let liveCategories = await adapter.getLiveCategories();
-      let liveChannels = await adapter.getLiveChannels();
-      let movieCategories = await adapter.getMovieCategories();
-      let movies = await adapter.getMovies();
-      let seriesCategories = await adapter.getSeriesCategories();
-      let seriesList = await adapter.getSeries();
+      // Fetch data from adapter in parallel to speed up downloads
+      const [
+        liveCategories,
+        liveChannelsData,
+        movieCategories,
+        moviesData,
+        seriesCategories,
+        seriesListData
+      ] = await Promise.all([
+        adapter.getLiveCategories(),
+        adapter.getLiveChannels(),
+        adapter.getMovieCategories(),
+        adapter.getMovies(),
+        adapter.getSeriesCategories(),
+        adapter.getSeries()
+      ]);
+
+      let liveChannels = liveChannelsData;
+      let movies = moviesData;
+      let seriesList = seriesListData;
 
       // Safety Caps to prevent database bloat / Neon free tier space overflow
       const MAX_CHANNELS = 2500;
@@ -127,173 +140,89 @@ export class SyncService {
         this.prisma.seriesCategory.deleteMany({ where: { providerId } })
       ]);
 
-      // 1. Sync Live Categories in Bulk
-      progress.step = 'Syncing Live Categories';
-      progress.message = 'Loading live channel categories...';
-      progress.totalItems = liveCategories.length;
-      progress.processedItems = 0;
+      // 1. Sync Categories in Parallel
+      progress.step = 'Syncing Categories';
+      progress.message = 'Loading categories in parallel...';
       this.syncProgressMap.set(providerId, { ...progress });
 
       const uniqueLiveCats = Array.from(new Map(liveCategories.map(c => [c.providerCategoryId, c])).values());
-      if (uniqueLiveCats.length > 0) {
-        await this.prisma.liveCategory.createMany({
-          data: uniqueLiveCats.map(cat => ({
-            providerId,
-            providerCategoryId: cat.providerCategoryId,
-            name: cat.name
-          })),
-          skipDuplicates: true
-        });
-      }
-
-      // 2. Sync Live Channels in Batches
-      progress.step = 'Syncing Live Channels';
-      progress.message = 'Ingesting live channels into database...';
-      const dbLiveCats = await this.prisma.liveCategory.findMany({ where: { providerId } });
-      const liveCatIdMap = new Map(dbLiveCats.map((c: any) => [c.providerCategoryId, c.id]));
-
-      progress.totalItems = liveChannels.length;
-      progress.processedItems = 0;
-      this.syncProgressMap.set(providerId, { ...progress });
-
-      const batchSize = 3000;
-      for (let i = 0; i < liveChannels.length; i += batchSize) {
-        if (await checkStopped()) return;
-
-        const batch = liveChannels.slice(i, i + batchSize);
-        const channelsToInsert = batch.map(ch => ({
-          providerId,
-          liveCategoryId: liveCatIdMap.get(ch.providerCategoryId) || dbLiveCats[0]?.id,
-          providerStreamId: ch.providerStreamId,
-          name: ch.name,
-          logo: ch.logo || null,
-          streamUrl: ch.streamUrl,
-          epgId: null
-        })).filter(ch => ch.liveCategoryId);
-
-        if (channelsToInsert.length > 0) {
-          await this.prisma.liveChannel.createMany({
-            data: channelsToInsert,
-            skipDuplicates: true
-          });
-        }
-
-        progress.processedItems = Math.min(progress.totalItems, i + batch.length);
-        this.syncProgressMap.set(providerId, { ...progress });
-      }
-
-      // 3. Sync Movie Categories in Bulk
-      progress.step = 'Syncing Movie Categories';
-      progress.message = 'Loading movie categories...';
-      progress.totalItems = movieCategories.length;
-      progress.processedItems = 0;
-      this.syncProgressMap.set(providerId, { ...progress });
-
       const uniqueMovieCats = Array.from(new Map(movieCategories.map(c => [c.providerCategoryId, c])).values());
-      if (uniqueMovieCats.length > 0) {
-        await this.prisma.movieCategory.createMany({
-          data: uniqueMovieCats.map(cat => ({
-            providerId,
-            providerCategoryId: cat.providerCategoryId,
-            name: cat.name
-          })),
-          skipDuplicates: true
-        });
-      }
-
-      // 4. Sync Movies in Batches
-      progress.step = 'Syncing Movies';
-      progress.message = 'Ingesting movies and mapping posters...';
-      const dbMovieCats = await this.prisma.movieCategory.findMany({ where: { providerId } });
-      const movieCatIdMap = new Map(dbMovieCats.map((c: any) => [c.providerCategoryId, c.id]));
-
-      progress.totalItems = movies.length;
-      progress.processedItems = 0;
-      this.syncProgressMap.set(providerId, { ...progress });
-
-      for (let i = 0; i < movies.length; i += batchSize) {
-        if (await checkStopped()) return;
-
-        const batch = movies.slice(i, i + batchSize);
-        const moviesToInsert = batch.map(m => ({
-          providerId,
-          movieCategoryId: movieCatIdMap.get(m.providerCategoryId) || dbMovieCats[0]?.id,
-          providerStreamId: m.providerStreamId,
-          name: m.name,
-          poster: Array.isArray(m.poster) ? (m.poster[0] || null) : (m.poster || null),
-          backdrop: null,
-          description: null,
-          year: null,
-          rating: null,
-          duration: null,
-          streamUrl: m.streamUrl
-        })).filter(m => m.movieCategoryId);
-
-        if (moviesToInsert.length > 0) {
-          await this.prisma.movie.createMany({
-            data: moviesToInsert,
-            skipDuplicates: true
-          });
-        }
-
-        progress.processedItems = Math.min(progress.totalItems, i + batch.length);
-        this.syncProgressMap.set(providerId, { ...progress });
-      }
-
-      // 5. Sync Series Categories in Bulk
-      progress.step = 'Syncing Series Categories';
-      progress.message = 'Loading series categories...';
-      progress.totalItems = seriesCategories.length;
-      progress.processedItems = 0;
-      this.syncProgressMap.set(providerId, { ...progress });
-
       const uniqueSeriesCats = Array.from(new Map(seriesCategories.map(c => [c.providerCategoryId, c])).values());
-      if (uniqueSeriesCats.length > 0) {
-        await this.prisma.seriesCategory.createMany({
-          data: uniqueSeriesCats.map(cat => ({
-            providerId,
-            providerCategoryId: cat.providerCategoryId,
-            name: cat.name
-          })),
-          skipDuplicates: true
-        });
-      }
 
-      // 6. Sync Series in Batches
-      progress.step = 'Syncing TV Series';
-      progress.message = 'Ingesting TV shows and structuring seasons...';
-      const dbSeriesCats = await this.prisma.seriesCategory.findMany({ where: { providerId } });
+      await Promise.all([
+        uniqueLiveCats.length > 0 ? this.prisma.liveCategory.createMany({
+          data: uniqueLiveCats.map(cat => ({ providerId, providerCategoryId: cat.providerCategoryId, name: cat.name })),
+          skipDuplicates: true
+        }) : Promise.resolve(),
+        uniqueMovieCats.length > 0 ? this.prisma.movieCategory.createMany({
+          data: uniqueMovieCats.map(cat => ({ providerId, providerCategoryId: cat.providerCategoryId, name: cat.name })),
+          skipDuplicates: true
+        }) : Promise.resolve(),
+        uniqueSeriesCats.length > 0 ? this.prisma.seriesCategory.createMany({
+          data: uniqueSeriesCats.map(cat => ({ providerId, providerCategoryId: cat.providerCategoryId, name: cat.name })),
+          skipDuplicates: true
+        }) : Promise.resolve(),
+      ]);
+
+      if (await checkStopped()) return;
+
+      // 2. Fetch all newly created category entries in parallel to get their mapped database IDs
+      const [dbLiveCats, dbMovieCats, dbSeriesCats] = await Promise.all([
+        this.prisma.liveCategory.findMany({ where: { providerId } }),
+        this.prisma.movieCategory.findMany({ where: { providerId } }),
+        this.prisma.seriesCategory.findMany({ where: { providerId } })
+      ]);
+
+      const liveCatIdMap = new Map(dbLiveCats.map((c: any) => [c.providerCategoryId, c.id]));
+      const movieCatIdMap = new Map(dbMovieCats.map((c: any) => [c.providerCategoryId, c.id]));
       const seriesCatIdMap = new Map(dbSeriesCats.map((c: any) => [c.providerCategoryId, c.id]));
 
-      progress.totalItems = seriesList.length;
-      progress.processedItems = 0;
+      // 3. Map Channels, Movies, and Series entries
+      const channelsToInsert = liveChannels.map(ch => ({
+        providerId,
+        liveCategoryId: liveCatIdMap.get(ch.providerCategoryId) || dbLiveCats[0]?.id,
+        providerStreamId: ch.providerStreamId,
+        name: ch.name,
+        logo: ch.logo || null,
+        streamUrl: ch.streamUrl,
+        epgId: null
+      })).filter(ch => ch.liveCategoryId);
+
+      const moviesToInsert = movies.map(m => ({
+        providerId,
+        movieCategoryId: movieCatIdMap.get(m.providerCategoryId) || dbMovieCats[0]?.id,
+        providerStreamId: m.providerStreamId,
+        name: m.name,
+        poster: Array.isArray(m.poster) ? (m.poster[0] || null) : (m.poster || null),
+        backdrop: null,
+        description: null,
+        year: null,
+        rating: null,
+        duration: null,
+        streamUrl: m.streamUrl
+      })).filter(m => m.movieCategoryId);
+
+      const seriesToInsert = seriesList.map(s => ({
+        providerId,
+        seriesCategoryId: seriesCatIdMap.get(s.providerCategoryId) || dbSeriesCats[0]?.id,
+        providerSeriesId: s.providerSeriesId,
+        name: s.name,
+        poster: Array.isArray(s.poster) ? (s.poster[0] || null) : (s.poster || null),
+        backdrop: Array.isArray(s.backdrop) ? (s.backdrop[0] || null) : (s.backdrop || null),
+        description: s.description || null,
+        year: s.year || null
+      })).filter(s => s.seriesCategoryId);
+
+      // 4. Ingest channels, movies, and series parallelly
+      progress.step = 'Ingesting Content';
+      progress.message = 'Saving channels, movies, and series...';
       this.syncProgressMap.set(providerId, { ...progress });
 
-      for (let i = 0; i < seriesList.length; i += batchSize) {
-        if (await checkStopped()) return;
-
-        const batch = seriesList.slice(i, i + batchSize);
-        const seriesToInsert = batch.map(s => ({
-          providerId,
-          seriesCategoryId: seriesCatIdMap.get(s.providerCategoryId) || dbSeriesCats[0]?.id,
-          providerSeriesId: s.providerSeriesId,
-          name: s.name,
-          poster: Array.isArray(s.poster) ? (s.poster[0] || null) : (s.poster || null),
-          backdrop: Array.isArray(s.backdrop) ? (s.backdrop[0] || null) : (s.backdrop || null),
-          description: s.description || null,
-          year: s.year || null
-        })).filter(s => s.seriesCategoryId);
-
-        if (seriesToInsert.length > 0) {
-          await this.prisma.series.createMany({
-            data: seriesToInsert,
-            skipDuplicates: true
-          });
-        }
-
-        progress.processedItems = Math.min(progress.totalItems, i + batch.length);
-        this.syncProgressMap.set(providerId, { ...progress });
-      }
+      await Promise.all([
+        channelsToInsert.length > 0 ? this.prisma.liveChannel.createMany({ data: channelsToInsert, skipDuplicates: true }) : Promise.resolve(),
+        moviesToInsert.length > 0 ? this.prisma.movie.createMany({ data: moviesToInsert, skipDuplicates: true }) : Promise.resolve(),
+        seriesToInsert.length > 0 ? this.prisma.series.createMany({ data: seriesToInsert, skipDuplicates: true }) : Promise.resolve()
+      ]);
 
       // Sync completed
       progress.status = 'COMPLETED';
