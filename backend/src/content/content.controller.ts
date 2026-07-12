@@ -307,24 +307,97 @@ export class ContentController {
     }
 
     const userId = this.getTargetUserId(req);
-    const [movies, series, channels] = await Promise.all([
+
+    // Fetch all content candidates for this user
+    const [dbMovies, dbSeries, dbChannels] = await Promise.all([
       this.prisma.movie.findMany({
-        where: { name: { contains: query, mode: 'insensitive' }, provider: { userId } },
-        take: 20,
+        where: { provider: { userId } },
         include: { category: true },
       }),
       this.prisma.series.findMany({
-        where: { name: { contains: query, mode: 'insensitive' }, provider: { userId } },
-        take: 20,
+        where: { provider: { userId } },
         include: { category: true },
       }),
       this.prisma.liveChannel.findMany({
-        where: { name: { contains: query, mode: 'insensitive' }, provider: { userId } },
-        take: 20,
+        where: { provider: { userId } },
         include: { category: true },
       }),
     ]);
 
+    const cleanQuery = query.toLowerCase().trim();
+
+    const scoreItem = (item: any) => {
+      const nameLower = item.name.toLowerCase();
+      // Calculate Dice coefficient similarity
+      const similarity = getSimilarity(cleanQuery, nameLower);
+      
+      // Calculate direct match boosts
+      let boost = 0.0;
+      if (nameLower.includes(cleanQuery)) {
+        boost += 0.4; // Strong boost for exact substring matches
+        if (nameLower.startsWith(cleanQuery)) {
+          boost += 0.2; // Extra boost if it starts with the query
+        }
+      }
+
+      return {
+        item,
+        score: similarity + boost
+      };
+    };
+
+    const movies = dbMovies
+      .map(scoreItem)
+      .filter(res => res.score > 0.22)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 20)
+      .map(res => res.item);
+
+    const series = dbSeries
+      .map(scoreItem)
+      .filter(res => res.score > 0.22)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 20)
+      .map(res => res.item);
+
+    const channels = dbChannels
+      .map(scoreItem)
+      .filter(res => res.score > 0.22)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 20)
+      .map(res => res.item);
+
     return { movies, series, channels };
   }
+}
+
+// ─── FUZZY SEARCH HELPER (Sørensen-Dice Coefficient) ──────────────────────
+function getSimilarity(str1: string, str2: string): number {
+  const s1 = str1.toLowerCase().replace(/\s+/g, '');
+  const s2 = str2.toLowerCase().replace(/\s+/g, '');
+  
+  if (s1 === s2) return 1.0;
+  if (s1.length < 2 || s2.length < 2) {
+    return s1.includes(s2) || s2.includes(s1) ? 0.5 : 0.0;
+  }
+
+  const getBigrams = (str: string) => {
+    const bigrams = new Set<string>();
+    for (let i = 0; i < str.length - 1; i++) {
+      bigrams.add(str.substring(i, i + 2));
+    }
+    return bigrams;
+  };
+
+  const bigrams1 = getBigrams(s1);
+  const bigrams2 = getBigrams(s2);
+
+  let intersection = 0;
+  for (const val of bigrams1) {
+    if (bigrams2.has(val)) {
+      intersection++;
+    }
+  }
+
+  return (2.0 * intersection) / (bigrams1.size + bigrams2.size);
 }
