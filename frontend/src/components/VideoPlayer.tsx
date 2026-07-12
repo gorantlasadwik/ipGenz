@@ -450,19 +450,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
               url: sourceUrlToPlay,
             }, {
               enableWorker: true,
-              enableStashBuffer: false,
-              stashInitialSize: 128,
-              // Live latency chasing — seek to live edge automatically
-              liveBufferLatencyChasing: true,
-              liveBufferLatencyChasingOnPaused: false,
-              liveBufferLatencyMaxLatency: 3.0,
-              liveBufferLatencyMinRemain: 0.5,
-              // Synchronise playback rate to live edge
-              liveSync: true,
-              liveSyncMaxLatency: 4,
-              liveSyncTargetLatency: 1.5,
-              liveSyncPlaybackRate: 1.2,
-
+              // Keep stash buffer ON for live streams — prevents starvation on slow connections
+              enableStashBuffer: true,
+              stashInitialSize: 384,
+              // Do NOT enable liveBufferLatencyChasing or liveSync —
+              // those seek/skip the video aggressively and make it unwatchable
             })
 
             mpegtsPlayerRef.current = mpegtsPlayer
@@ -525,7 +517,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
           }
 
           // ── Stall watchdog ──────────────────────────────────────────────────
-          // Polls every 3 s; if currentTime hasn't advanced for 6 s → reconnect
+          // Polls every 5 s; if currentTime hasn't advanced for 20 s → reconnect.
+          // Threshold is intentionally generous — live IPTV streams have natural
+          // buffering gaps (ad breaks, segment boundaries) that can pause the
+          // video element for 5-10 s without being a real stall.
+          const WATCHDOG_INTERVAL_MS = 5000
+          const STALL_RECONNECT_TICKS = 4 // 4 × 5s = 20s before reconnect
           const startWatchdog = (sourceUrlToPlay: string) => {
             stopWatchdog()
             lastCurrentTimeRef.current = -1
@@ -533,21 +530,26 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             watchdogIntervalRef.current = setInterval(() => {
               if (isDestroyedRef.current) return
               const vid = videoRef.current
-              if (!vid || vid.paused || vid.ended) return // don't chase while paused
-              const ct = vid.currentTime
-              if (ct === lastCurrentTimeRef.current) {
-                stallCountRef.current++
-                console.warn(`[ContinuousPlay] Stall detected (${stallCountRef.current * 3}s stuck at ${ct.toFixed(2)})`)
-                if (stallCountRef.current >= 2) { // stalled 6 s
-                  console.warn('[ContinuousPlay] Reconnecting due to stall...')
+              if (!vid || vid.paused || vid.ended) return // paused by user, don't reconnect
+              if (!vid.error && vid.readyState >= 2 && vid.buffered.length > 0) {
+                // Video has buffered data — give it more time before declaring a stall
+                const ct = vid.currentTime
+                if (ct === lastCurrentTimeRef.current) {
+                  stallCountRef.current++
+                  console.warn(`[ContinuousPlay] Possible stall (${stallCountRef.current * WATCHDOG_INTERVAL_MS / 1000}s stuck at ${ct.toFixed(2)})`)
+                  if (stallCountRef.current >= STALL_RECONNECT_TICKS) {
+                    console.warn('[ContinuousPlay] Hard stall confirmed — reconnecting...')
+                    stallCountRef.current = 0
+                    scheduleReconnect(sourceUrlToPlay)
+                  }
+                } else {
+                  lastCurrentTimeRef.current = ct
                   stallCountRef.current = 0
-                  scheduleReconnect(sourceUrlToPlay)
+                  // Reset backoff counter once we confirm playback is healthy
+                  reconnectAttemptsRef.current = 0
                 }
-              } else {
-                lastCurrentTimeRef.current = ct
-                stallCountRef.current = 0
               }
-            }, 3000)
+            }, WATCHDOG_INTERVAL_MS)
           }
 
           const stopWatchdog = () => {
@@ -558,7 +560,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
           }
 
           // ── Native video element events ─────────────────────────────────────
-          // 'ended' / 'stalled' / 'error' as extra safety net
+          // Only hook 'ended' and hard 'error' — NOT 'stalled' (fires too often
+          // on live streams during normal segment-boundary buffering).
           const attachNativeVideoEvents = (sourceUrlToPlay: string) => {
             const vid = videoRef.current
             if (!vid) return
@@ -568,24 +571,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
                 scheduleReconnect(sourceUrlToPlay)
               }
             }
-            const onStalled = () => {
-              // 'stalled' fires when the UA hasn't received data for a few seconds.
-              // Don't reconnect immediately — the watchdog will handle it after 6s.
-              console.warn('[ContinuousPlay] native video stalled event')
-            }
             const onError = () => {
-              if (!isDestroyedRef.current) {
-                console.warn('[ContinuousPlay] native video error — reconnecting...')
+              // Only reconnect on fatal MEDIA_ERR_NETWORK / MEDIA_ERR_SRC_NOT_SUPPORTED
+              const code = vid.error?.code
+              if (!isDestroyedRef.current && (code === 2 || code === 4)) {
+                console.warn('[ContinuousPlay] fatal video error (code', code, ') — reconnecting...')
                 scheduleReconnect(sourceUrlToPlay)
               }
             }
             vid.addEventListener('ended', onEnded)
-            vid.addEventListener('stalled', onStalled)
             vid.addEventListener('error', onError)
-            // Return cleanup function
             return () => {
               vid.removeEventListener('ended', onEnded)
-              vid.removeEventListener('stalled', onStalled)
               vid.removeEventListener('error', onError)
             }
           }
