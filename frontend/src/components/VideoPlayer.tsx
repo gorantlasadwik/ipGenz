@@ -554,7 +554,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
         clearTimeout(timeoutId)
       }
     }
-  }, [isMpegTs, sourceUrl, options, onReady])
+  }, [isMpegTs, sourceUrl, options.autoplay, onReady])
 
   // Dispose both players when the component unmounts
   useEffect(() => {

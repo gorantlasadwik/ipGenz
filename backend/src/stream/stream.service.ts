@@ -149,7 +149,7 @@ export class StreamService {
       return;
     }
 
-    const ffmpegPath = ffmpegStatic;
+    const ffmpegPath = process.env.NODE_ENV === 'production' ? 'ffmpeg' : ffmpegStatic;
     const args: string[] = [];
 
     if (startTime !== undefined && startTime > 0) {
