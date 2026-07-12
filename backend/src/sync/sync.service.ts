@@ -85,10 +85,10 @@ export class SyncService {
       let movies = moviesData;
       let seriesList = seriesListData;
 
-      // Safety Caps to prevent database bloat / Neon free tier space overflow
-      const MAX_CHANNELS = 2500;
-      const MAX_MOVIES = 1500;
-      const MAX_SERIES = 500;
+      // Safety Caps raised to support full playlist syncing on Aiven
+      const MAX_CHANNELS = 100000;
+      const MAX_MOVIES = 100000;
+      const MAX_SERIES = 50000;
 
       let truncatedChannels = false;
       let truncatedMovies = false;
@@ -208,38 +208,51 @@ export class SyncService {
       progress.totalItems = totalRealItems;
       progress.processedItems = 0;
 
+      const batchSize = 3000;
+
       // Ingest Channels
       if (channelsToInsert.length > 0) {
         progress.step = 'Syncing Live Channels';
-        progress.message = `Saving ${channelsToInsert.length} channels...`;
         this.syncProgressMap.set(providerId, { ...progress });
-        await this.prisma.liveChannel.createMany({ data: channelsToInsert, skipDuplicates: true });
-        progress.processedItems += channelsToInsert.length;
-        this.syncProgressMap.set(providerId, { ...progress });
+        const success = await this.batchedInsert(
+          this.prisma.liveChannel,
+          channelsToInsert,
+          batchSize,
+          progress,
+          providerId,
+          checkStopped
+        );
+        if (!success) return;
       }
-
-      if (await checkStopped()) return;
 
       // Ingest Movies
       if (moviesToInsert.length > 0) {
         progress.step = 'Syncing Movies';
-        progress.message = `Saving ${moviesToInsert.length} movies...`;
         this.syncProgressMap.set(providerId, { ...progress });
-        await this.prisma.movie.createMany({ data: moviesToInsert, skipDuplicates: true });
-        progress.processedItems += moviesToInsert.length;
-        this.syncProgressMap.set(providerId, { ...progress });
+        const success = await this.batchedInsert(
+          this.prisma.movie,
+          moviesToInsert,
+          batchSize,
+          progress,
+          providerId,
+          checkStopped
+        );
+        if (!success) return;
       }
-
-      if (await checkStopped()) return;
 
       // Ingest Series
       if (seriesToInsert.length > 0) {
         progress.step = 'Syncing TV Series';
-        progress.message = `Saving ${seriesToInsert.length} series...`;
         this.syncProgressMap.set(providerId, { ...progress });
-        await this.prisma.series.createMany({ data: seriesToInsert, skipDuplicates: true });
-        progress.processedItems += seriesToInsert.length;
-        this.syncProgressMap.set(providerId, { ...progress });
+        const success = await this.batchedInsert(
+          this.prisma.series,
+          seriesToInsert,
+          batchSize,
+          progress,
+          providerId,
+          checkStopped
+        );
+        if (!success) return;
       }
 
       // Sync completed
@@ -276,6 +289,32 @@ export class SyncService {
       }
       throw error;
     }
+  }
+
+  private async batchedInsert(
+    prismaModel: any,
+    data: any[],
+    batchSize: number,
+    progress: SyncProgress,
+    providerId: string,
+    checkStopped: () => Promise<boolean>
+  ): Promise<boolean> {
+    for (let i = 0; i < data.length; i += batchSize) {
+      if (await checkStopped()) return false;
+      const batch = data.slice(i, i + batchSize);
+      
+      progress.message = `Saving items (${Math.min(progress.totalItems, i + batch.length)} / ${data.length})...`;
+      this.syncProgressMap.set(providerId, { ...progress });
+
+      await prismaModel.createMany({
+        data: batch,
+        skipDuplicates: true
+      });
+
+      progress.processedItems += batch.length;
+      this.syncProgressMap.set(providerId, { ...progress });
+    }
+    return true;
   }
 
   private async runMockSync(providerId: string, progress: SyncProgress, checkStopped: () => Promise<boolean>, start: number) {
