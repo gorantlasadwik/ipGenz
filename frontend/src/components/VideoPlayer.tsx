@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import videojs from 'video.js'
 import Player from 'video.js/dist/types/player'
 import 'video.js/dist/video-js.css'
-import { Settings, Tv, Volume2 } from 'lucide-react'
+import { Settings, Tv, Volume2, Play } from 'lucide-react'
 import { api } from '@/lib/api'
 
 interface VideoPlayerProps {
@@ -30,8 +30,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   const [isTranscodingRequired, setIsTranscodingRequired] = useState(false)
   // Set to true when client-side PMT parsing detects a codec the browser can't play natively (AC3/EAC3/MP2)
   const [clientDetectedTranscodeNeeded, setClientDetectedTranscodeNeeded] = useState(false)
-  // Show a button overlay when AC3 is detected — user click provides the gesture Chrome needs for play()
-  const [showEnableAudioButton, setShowEnableAudioButton] = useState(false)
+  // Show a button overlay when autoplay is blocked by the browser policy
+  const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false)
   // Use a ref so we can read the latest value inside selectAudioTrack without triggering re-renders
   const isTranscodingRequiredRef = useRef(false)
 
@@ -184,7 +184,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   useEffect(() => {
     setAudioTracks([])
     setClientDetectedTranscodeNeeded(false)
-    setShowEnableAudioButton(false)
+    setIsAutoplayBlocked(false)
     transcodeTriggeredRef.current = false
     
     if (rawSourceUrl && rawSourceUrl.includes('/stream/')) {
@@ -468,10 +468,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
               const isMseCodecError = type === 'MediaError' && detail === 'MediaMSEError'
               if (isMseCodecError && !sourceUrlToPlay.includes('transcode=audio') && !transcodeTriggeredRef.current) {
                 transcodeTriggeredRef.current = true
-                console.log('[VideoPlayer] AC3/EAC3 codec rejected by MSE — showing Enable Audio button...')
-                // Show a button instead of auto-reloading — the user's click gives Chrome
-                // the gesture context needed to allow play() on the transcoded stream.
-                setShowEnableAudioButton(true)
+                console.log('[VideoPlayer] AC3/EAC3 codec rejected by MSE — reloading with transcoding...')
+                setClientDetectedTranscodeNeeded(true)
               }
             })
 
@@ -484,12 +482,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             }, 2000)
 
             if (options.autoplay) {
-              // Simple play — the user gesture is preserved when this runs within
-              // a click handler (Enable Audio button) or from initial channel selection.
               const playPromise = mpegtsPlayer.play()
               if (playPromise && typeof playPromise.catch === 'function') {
                 playPromise.catch((err: any) => {
                   console.warn("Autoplay blocked or failed:", err)
+                  if (err?.name === 'NotAllowedError') {
+                    setIsAutoplayBlocked(true)
+                  }
                 })
               }
             }
@@ -608,57 +607,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
         playsInline
       />
 
-      {/* Enable Audio Overlay — shown when AC3/Dolby audio is detected */}
-      {showEnableAudioButton && (
+      {/* Click to Play / Autoplay Blocked Overlay */}
+      {isAutoplayBlocked && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <button
             onClick={() => {
-              setShowEnableAudioButton(false)
-              transcodeTriggeredRef.current = true
-
-              const transcodeUrl = `${rawSourceUrl}${rawSourceUrl.includes('?') ? '&' : '?'}transcode=audio`
-              const mpegts = mpegtsRef.current
-
-              if (!mpegts || !videoRef.current) {
-                // Fallback: use React state (slower but works)
-                setClientDetectedTranscodeNeeded(true)
-                return
-              }
-
-              // Imperatively recreate the player SYNCHRONOUSLY within the user gesture
-              // so play() is called before Chrome's gesture context expires
+              setIsAutoplayBlocked(false)
               if (mpegtsPlayerRef.current) {
-                try {
-                  mpegtsPlayerRef.current.unload()
-                  mpegtsPlayerRef.current.detachMediaElement()
-                  mpegtsPlayerRef.current.destroy()
-                } catch (e) {}
-                mpegtsPlayerRef.current = null
-              }
-
-              resetVideoElement()
-
-              const player = mpegts.createPlayer(
-                { type: 'mpegts', isLive: true, url: transcodeUrl },
-                { enableWorker: true, enableStashBuffer: false, stashInitialSize: 128 }
-              )
-              mpegtsPlayerRef.current = player
-              player.attachMediaElement(videoRef.current)
-              player.load()
-
-              // play() called synchronously here — user gesture context still active!
-              const playPromise = player.play()
-              if (playPromise && typeof playPromise.catch === 'function') {
-                playPromise.catch((err: any) => console.warn('Enable Audio play failed:', err))
+                mpegtsPlayerRef.current.play()?.catch((err: any) => console.warn('Play failed:', err))
+              } else if (playerRef.current) {
+                playerRef.current.play()?.catch((err: any) => console.warn('Play failed:', err))
               }
             }}
             className="flex flex-col items-center gap-3 px-8 py-5 bg-red-600 hover:bg-red-500 active:bg-red-700 rounded-2xl text-white font-bold shadow-2xl transition-all transform hover:scale-105 active:scale-95"
           >
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
-            </svg>
-            <span className="text-sm">Enable Audio</span>
-            <span className="text-xs text-red-200 font-normal">Dolby AC3 detected — tap to activate</span>
+            <div className="p-3 bg-white/10 rounded-full">
+              <Play size={28} fill="currentColor" />
+            </div>
+            <span className="text-sm tracking-wide">Click to Play</span>
+            <span className="text-xs text-red-200 font-normal">Playback is ready to start</span>
           </button>
         </div>
       )}
