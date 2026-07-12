@@ -58,14 +58,14 @@ export class SyncService {
     const checkStopped = async (): Promise<boolean> => {
       const current = this.syncProgressMap.get(providerId);
       if (current && current.status === 'STOPPED') {
-        this.logger.log(`Sync for provider ${providerId} aborted by user.`);
+        this.logger.log(`Sync aborted by user.`);
         try {
           await this.prisma.provider.update({
             where: { id: providerId },
             data: { status: 'ACTIVE' }
           });
         } catch (e) {
-          this.logger.error(`Failed to update status for stopped provider ${providerId}: ${e.message}`);
+          this.logger.error(`Failed to update status for stopped provider: ${e.message}`);
         }
         return true;
       }
@@ -73,275 +73,95 @@ export class SyncService {
     };
 
     try {
-      let liveCategories: any[] = [];
-      let liveChannelsData: any[] = [];
-      let movieCategories: any[] = [];
-      let moviesData: any[] = [];
-      let seriesCategories: any[] = [];
-      let seriesListData: any[] = [];
-
       const targetProvider = await this.prisma.provider.findUnique({
         where: { id: providerId }
       });
 
-      let cachedProvider: any = null;
-      if (targetProvider) {
-        if (targetProvider.providerType === 'XTREAM') {
-          cachedProvider = await this.prisma.provider.findFirst({
-            where: {
-              NOT: { id: providerId },
-              providerType: 'XTREAM',
-              serverUrl: targetProvider.serverUrl,
-              username: targetProvider.username,
-              status: 'ACTIVE',
-              lastSyncAt: { not: null }
-            }
-          });
-        } else if (targetProvider.providerType === 'M3U') {
-          cachedProvider = await this.prisma.provider.findFirst({
-            where: {
-              NOT: { id: providerId },
-              providerType: 'M3U',
-              playlistUrl: targetProvider.playlistUrl,
-              status: 'ACTIVE',
-              lastSyncAt: { not: null }
-            }
-          });
-        }
+      if (!targetProvider) {
+        throw new Error('Provider not found');
       }
 
-      if (cachedProvider) {
-        this.logger.log(`Found active database cache for provider. Copying from provider ID: ${cachedProvider.id}`);
-        progress.message = 'Loading data from database cache to save network calls...';
-        this.syncProgressMap.set(providerId, { ...progress });
+      // Fetch data from adapter sequentially to avoid overloading low-end IPTV servers with concurrent requests
+      const liveCategories = await adapter.getLiveCategories();
+      const liveChannelsData = await adapter.getLiveChannels();
+      const movieCategories = await adapter.getMovieCategories();
+      const moviesData = await adapter.getMovies();
+      const seriesCategories = await adapter.getSeriesCategories();
+      const seriesListData = await adapter.getSeries();
 
-        const [
-          dbLiveCats,
-          dbLiveChans,
-          dbMovieCats,
-          dbMovies,
-          dbSeriesCats,
-          dbSeries
-        ] = await Promise.all([
-          this.prisma.liveCategory.findMany({ where: { providerId: cachedProvider.id } }),
-          this.prisma.liveChannel.findMany({ where: { providerId: cachedProvider.id }, include: { category: true } }),
-          this.prisma.movieCategory.findMany({ where: { providerId: cachedProvider.id } }),
-          this.prisma.movie.findMany({ where: { providerId: cachedProvider.id }, include: { category: true } }),
-          this.prisma.seriesCategory.findMany({ where: { providerId: cachedProvider.id } }),
-          this.prisma.series.findMany({ where: { providerId: cachedProvider.id }, include: { category: true } })
-        ]);
-
-        liveCategories = dbLiveCats.map((c: any) => ({ providerCategoryId: c.providerCategoryId, name: c.name }));
-        liveChannelsData = dbLiveChans.map((ch: any) => ({
-          providerCategoryId: ch.category?.providerCategoryId || '',
-          providerStreamId: ch.providerStreamId,
-          name: ch.name,
-          logo: ch.logo,
-          streamUrl: ch.streamUrl
-        }));
-        movieCategories = dbMovieCats.map((c: any) => ({ providerCategoryId: c.providerCategoryId, name: c.name }));
-        moviesData = dbMovies.map((m: any) => ({
-          providerCategoryId: m.category?.providerCategoryId || '',
-          providerStreamId: m.providerStreamId,
-          name: m.name,
-          poster: m.poster,
-          backdrop: m.backdrop,
-          description: m.description,
-          year: m.year,
-          rating: m.rating,
-          duration: m.duration,
-          streamUrl: m.streamUrl
-        }));
-        seriesCategories = dbSeriesCats.map((c: any) => ({ providerCategoryId: c.providerCategoryId, name: c.name }));
-        seriesListData = dbSeries.map((s: any) => ({
-          providerCategoryId: s.category?.providerCategoryId || '',
-          providerSeriesId: s.providerSeriesId,
-          name: s.name,
-          poster: s.poster,
-          backdrop: s.backdrop,
-          description: s.description,
-          year: s.year
-        }));
-      } else {
-        // Fetch data from adapter sequentially to avoid overloading low-end IPTV servers with concurrent requests
-        liveCategories = await adapter.getLiveCategories();
-        liveChannelsData = await adapter.getLiveChannels();
-        movieCategories = await adapter.getMovieCategories();
-        moviesData = await adapter.getMovies();
-        seriesCategories = await adapter.getSeriesCategories();
-        seriesListData = await adapter.getSeries();
-      }
-
-      let liveChannels = liveChannelsData;
-      let movies = moviesData;
-      let seriesList = seriesListData;
-
-      const totalRealItems = liveChannels.length + movies.length + seriesList.length;
+      const totalRealItems = liveChannelsData.length + moviesData.length + seriesListData.length;
 
       if (totalRealItems === 0) {
-        this.logger.warn(`No items returned from adapter for provider ${providerId}. Seeding mock content...`);
+        this.logger.warn(`No items returned from adapter. Seeding mock content...`);
         return this.runMockSync(providerId, progress, checkStopped, start);
       }
 
-      this.logger.log(
-        `Ingesting playlist content: ${liveChannels.length} Channels, ${movies.length} Movies, ${seriesList.length} Series.`
-      );
+      // Find all user providers that share the same playlist credentials/URL
+      const matchingProviders = await this.prisma.provider.findMany({
+        where: {
+          OR: [
+            targetProvider.providerType === 'XTREAM' ? {
+              providerType: 'XTREAM',
+              serverUrl: targetProvider.serverUrl,
+              username: targetProvider.username
+            } : null,
+            targetProvider.providerType === 'M3U' ? {
+              providerType: 'M3U',
+              playlistUrl: targetProvider.playlistUrl
+            } : null
+          ].filter(Boolean) as any
+        }
+      });
 
-      // 0. Clear old cache to prevent duplicates and stale content
-      progress.step = 'Clearing Old Cache';
-      progress.message = 'Removing old categories and streams...';
-      this.syncProgressMap.set(providerId, { ...progress });
+      this.logger.log(`Found ${matchingProviders.length} providers sharing this playlist to sync.`);
 
-      await this.prisma.$transaction([
-        this.prisma.liveCategory.deleteMany({ where: { providerId } }),
-        this.prisma.movieCategory.deleteMany({ where: { providerId } }),
-        this.prisma.seriesCategory.deleteMany({ where: { providerId } })
-      ]);
+      // Sync all matching providers with the fresh data incrementally (preserves IDs, history, favorites)
+      for (const p of matchingProviders) {
+        if (await checkStopped()) return;
 
-      // 1. Sync Categories in Parallel
-      progress.step = 'Syncing Categories';
-      progress.message = 'Loading categories in parallel...';
-      this.syncProgressMap.set(providerId, { ...progress });
-
-      const uniqueLiveCats = Array.from(new Map(liveCategories.map(c => [c.providerCategoryId, c])).values());
-      const uniqueMovieCats = Array.from(new Map(movieCategories.map(c => [c.providerCategoryId, c])).values());
-      const uniqueSeriesCats = Array.from(new Map(seriesCategories.map(c => [c.providerCategoryId, c])).values());
-
-      await Promise.all([
-        uniqueLiveCats.length > 0 ? this.prisma.liveCategory.createMany({
-          data: uniqueLiveCats.map(cat => ({ providerId, providerCategoryId: cat.providerCategoryId, name: cat.name })),
-          skipDuplicates: true
-        }) : Promise.resolve(),
-        uniqueMovieCats.length > 0 ? this.prisma.movieCategory.createMany({
-          data: uniqueMovieCats.map(cat => ({ providerId, providerCategoryId: cat.providerCategoryId, name: cat.name })),
-          skipDuplicates: true
-        }) : Promise.resolve(),
-        uniqueSeriesCats.length > 0 ? this.prisma.seriesCategory.createMany({
-          data: uniqueSeriesCats.map(cat => ({ providerId, providerCategoryId: cat.providerCategoryId, name: cat.name })),
-          skipDuplicates: true
-        }) : Promise.resolve(),
-      ]);
-
-      if (await checkStopped()) return;
-
-      // 2. Fetch all newly created category entries in parallel to get their mapped database IDs
-      const [dbLiveCats, dbMovieCats, dbSeriesCats] = await Promise.all([
-        this.prisma.liveCategory.findMany({ where: { providerId } }),
-        this.prisma.movieCategory.findMany({ where: { providerId } }),
-        this.prisma.seriesCategory.findMany({ where: { providerId } })
-      ]);
-
-      const liveCatIdMap = new Map(dbLiveCats.map((c: any) => [c.providerCategoryId, c.id]));
-      const movieCatIdMap = new Map(dbMovieCats.map((c: any) => [c.providerCategoryId, c.id]));
-      const seriesCatIdMap = new Map(dbSeriesCats.map((c: any) => [c.providerCategoryId, c.id]));
-
-      // 3. Map Channels, Movies, and Series entries
-      const channelsToInsert = liveChannels.map(ch => ({
-        providerId,
-        liveCategoryId: liveCatIdMap.get(ch.providerCategoryId) || dbLiveCats[0]?.id,
-        providerStreamId: ch.providerStreamId,
-        name: ch.name,
-        logo: ch.logo || null,
-        streamUrl: ch.streamUrl,
-        epgId: null
-      })).filter(ch => ch.liveCategoryId);
-
-      const moviesToInsert = movies.map(m => ({
-        providerId,
-        movieCategoryId: movieCatIdMap.get(m.providerCategoryId) || dbMovieCats[0]?.id,
-        providerStreamId: m.providerStreamId,
-        name: m.name,
-        poster: Array.isArray(m.poster) ? (m.poster[0] || null) : (m.poster || null),
-        backdrop: null,
-        description: null,
-        year: null,
-        rating: null,
-        duration: null,
-        streamUrl: m.streamUrl
-      })).filter(m => m.movieCategoryId);
-
-      const seriesToInsert = seriesList.map(s => ({
-        providerId,
-        seriesCategoryId: seriesCatIdMap.get(s.providerCategoryId) || dbSeriesCats[0]?.id,
-        providerSeriesId: s.providerSeriesId,
-        name: s.name,
-        poster: Array.isArray(s.poster) ? (s.poster[0] || null) : (s.poster || null),
-        backdrop: Array.isArray(s.backdrop) ? (s.backdrop[0] || null) : (s.backdrop || null),
-        description: s.description || null,
-        year: s.year || null
-      })).filter(s => s.seriesCategoryId);
-
-      // 4. Ingest channels, movies, and series sequentially to report real-time progress accurately
-      progress.totalItems = totalRealItems;
-      progress.processedItems = 0;
-
-      const batchSize = 5000;
-
-      // Ingest Channels
-      if (channelsToInsert.length > 0) {
-        progress.step = 'Syncing Live Channels';
-        this.syncProgressMap.set(providerId, { ...progress });
-        const success = await this.batchedInsert(
-          this.prisma.liveChannel,
-          channelsToInsert,
-          batchSize,
-          progress,
-          providerId,
-          checkStopped
-        );
-        if (!success) return;
-      }
-
-      // Ingest Movies
-      if (moviesToInsert.length > 0) {
-        progress.step = 'Syncing Movies';
-        this.syncProgressMap.set(providerId, { ...progress });
-        const success = await this.batchedInsert(
-          this.prisma.movie,
-          moviesToInsert,
-          batchSize,
-          progress,
-          providerId,
-          checkStopped
-        );
-        if (!success) return;
-      }
-
-      // Ingest Series
-      if (seriesToInsert.length > 0) {
-        progress.step = 'Syncing TV Series';
-        this.syncProgressMap.set(providerId, { ...progress });
-        const success = await this.batchedInsert(
-          this.prisma.series,
-          seriesToInsert,
-          batchSize,
-          progress,
-          providerId,
-          checkStopped
-        );
-        if (!success) return;
-      }
-
-      // Sync completed
-      progress.status = 'COMPLETED';
-      progress.step = 'Completed';
-      progress.message = `Successfully synced all ${totalRealItems} items!`;
-      this.syncProgressMap.set(providerId, { ...progress });
-
-      try {
+        // Set status to SYNCING for this provider too
         await this.prisma.provider.update({
-          where: { id: providerId },
+          where: { id: p.id },
+          data: { status: 'SYNCING' }
+        });
+
+        // Set local progress tracker for the triggering provider ID to let UI update
+        const currentProgress = p.id === providerId ? progress : {
+          status: 'SYNCING' as const,
+          step: 'Syncing playlist',
+          message: 'Applying playlist updates...',
+          totalItems: totalRealItems,
+          processedItems: 0
+        };
+        this.syncProgressMap.set(p.id, currentProgress);
+
+        await this.runIncrementalSyncFor(
+          p.id,
+          liveCategories,
+          liveChannelsData,
+          movieCategories,
+          moviesData,
+          seriesCategories,
+          seriesListData,
+          currentProgress,
+          checkStopped
+        );
+
+        // Mark as completed
+        currentProgress.status = 'COMPLETED';
+        currentProgress.step = 'Completed';
+        currentProgress.message = `Successfully synced ${totalRealItems} items!`;
+        this.syncProgressMap.set(p.id, { ...currentProgress });
+
+        await this.prisma.provider.update({
+          where: { id: p.id },
           data: { lastSyncAt: new Date(), status: 'ACTIVE' }
         });
-      } catch (e) {
-        this.logger.error(`Failed to update status on completion for provider ${providerId}: ${e.message}`);
       }
 
       this.observability.recordSyncTime(providerId, Date.now() - start);
-      this.logger.log(`Ingestion completed for provider: ${providerId}`);
-
     } catch (error) {
-      this.logger.error(`Sync failed for provider ${providerId}`, error);
+      this.logger.error(`Sync failed`, error);
       progress.status = 'ERROR';
       progress.message = error.message;
       this.syncProgressMap.set(providerId, { ...progress });
@@ -352,9 +172,216 @@ export class SyncService {
           data: { status: 'ERROR' }
         });
       } catch (e) {
-        this.logger.error(`Failed to update status on error for provider ${providerId}: ${e.message}`);
+        this.logger.error(`Failed to update status on error: ${e.message}`);
       }
       throw error;
+    }
+  }
+
+  private async runIncrementalSyncFor(
+    providerId: string,
+    liveCategories: any[],
+    liveChannels: any[],
+    movieCategories: any[],
+    movies: any[],
+    seriesCategories: any[],
+    seriesList: any[],
+    progress: SyncProgress,
+    checkStopped: () => Promise<boolean>
+  ) {
+    const totalItems = liveChannels.length + movies.length + seriesList.length;
+    progress.totalItems = totalItems;
+    progress.processedItems = 0;
+    this.syncProgressMap.set(providerId, { ...progress });
+
+    // 1. Sync Categories
+    progress.step = 'Syncing Categories';
+    progress.message = 'Loading categories...';
+    this.syncProgressMap.set(providerId, { ...progress });
+
+    const uniqueLiveCats = Array.from(new Map(liveCategories.map(c => [c.providerCategoryId, c])).values());
+    const uniqueMovieCats = Array.from(new Map(movieCategories.map(c => [c.providerCategoryId, c])).values());
+    const uniqueSeriesCats = Array.from(new Map(seriesCategories.map(c => [c.providerCategoryId, c])).values());
+
+    await Promise.all([
+      uniqueLiveCats.length > 0 ? this.prisma.liveCategory.createMany({
+        data: uniqueLiveCats.map(cat => ({ providerId, providerCategoryId: cat.providerCategoryId, name: cat.name })),
+        skipDuplicates: true
+      }) : Promise.resolve(),
+      uniqueMovieCats.length > 0 ? this.prisma.movieCategory.createMany({
+        data: uniqueMovieCats.map(cat => ({ providerId, providerCategoryId: cat.providerCategoryId, name: cat.name })),
+        skipDuplicates: true
+      }) : Promise.resolve(),
+      uniqueSeriesCats.length > 0 ? this.prisma.seriesCategory.createMany({
+        data: uniqueSeriesCats.map(cat => ({ providerId, providerCategoryId: cat.providerCategoryId, name: cat.name })),
+        skipDuplicates: true
+      }) : Promise.resolve(),
+    ]);
+
+    // Cleanup obsolete categories
+    const activeLiveCatIds = new Set(uniqueLiveCats.map(c => c.providerCategoryId));
+    const activeMovieCatIds = new Set(uniqueMovieCats.map(c => c.providerCategoryId));
+    const activeSeriesCatIds = new Set(uniqueSeriesCats.map(c => c.providerCategoryId));
+
+    const [dbLiveCats, dbMovieCats, dbSeriesCats] = await Promise.all([
+      this.prisma.liveCategory.findMany({ where: { providerId } }),
+      this.prisma.movieCategory.findMany({ where: { providerId } }),
+      this.prisma.seriesCategory.findMany({ where: { providerId } })
+    ]);
+
+    const liveCatsToDelete = dbLiveCats.filter(c => !activeLiveCatIds.has(c.providerCategoryId)).map(c => c.id);
+    const movieCatsToDelete = dbMovieCats.filter(c => !activeMovieCatIds.has(c.providerCategoryId)).map(c => c.id);
+    const seriesCatsToDelete = dbSeriesCats.filter(c => !activeSeriesCatIds.has(c.providerCategoryId)).map(c => c.id);
+
+    if (liveCatsToDelete.length > 0) await this.prisma.liveCategory.deleteMany({ where: { id: { in: liveCatsToDelete } } });
+    if (movieCatsToDelete.length > 0) await this.prisma.movieCategory.deleteMany({ where: { id: { in: movieCatsToDelete } } });
+    if (seriesCatsToDelete.length > 0) await this.prisma.seriesCategory.deleteMany({ where: { id: { in: seriesCatsToDelete } } });
+
+    // Fetch updated category list to get maps
+    const [updatedLiveCats, updatedMovieCats, updatedSeriesCats] = await Promise.all([
+      this.prisma.liveCategory.findMany({ where: { providerId } }),
+      this.prisma.movieCategory.findMany({ where: { providerId } }),
+      this.prisma.seriesCategory.findMany({ where: { providerId } })
+    ]);
+
+    const liveCatIdMap = new Map(updatedLiveCats.map((c: any) => [c.providerCategoryId, c.id]));
+    const movieCatIdMap = new Map(updatedMovieCats.map((c: any) => [c.providerCategoryId, c.id]));
+    const seriesCatIdMap = new Map(updatedSeriesCats.map((c: any) => [c.providerCategoryId, c.id]));
+
+    if (await checkStopped()) return;
+
+    const batchSize = 5000;
+
+    // 2. Ingest Channels
+    progress.step = 'Syncing Live Channels';
+    this.syncProgressMap.set(providerId, { ...progress });
+
+    const existingChannels = await this.prisma.liveChannel.findMany({
+      where: { providerId },
+      select: { id: true, providerStreamId: true }
+    });
+    const existingChanMap = new Set(existingChannels.map(c => c.providerStreamId));
+
+    const channelsToInsert = liveChannels
+      .map(ch => ({
+        providerId,
+        liveCategoryId: liveCatIdMap.get(ch.providerCategoryId) || updatedLiveCats[0]?.id,
+        providerStreamId: ch.providerStreamId,
+        name: ch.name,
+        logo: ch.logo || null,
+        streamUrl: ch.streamUrl,
+        epgId: null
+      }))
+      .filter(ch => ch.liveCategoryId && !existingChanMap.has(ch.providerStreamId));
+
+    const downloadedChanStreamIds = new Set(liveChannels.map(ch => ch.providerStreamId));
+    const channelsToDelete = existingChannels
+      .filter(ch => !downloadedChanStreamIds.has(ch.providerStreamId))
+      .map(ch => ch.id);
+
+    if (channelsToInsert.length > 0) {
+      await this.batchedInsert(this.prisma.liveChannel, channelsToInsert, batchSize, progress, providerId, checkStopped);
+    } else {
+      progress.processedItems += liveChannels.length;
+      this.syncProgressMap.set(providerId, { ...progress });
+    }
+
+    if (channelsToDelete.length > 0) {
+      for (let i = 0; i < channelsToDelete.length; i += batchSize) {
+        const batch = channelsToDelete.slice(i, i + batchSize);
+        await this.prisma.liveChannel.deleteMany({ where: { id: { in: batch } } });
+      }
+    }
+
+    if (await checkStopped()) return;
+
+    // 3. Ingest Movies
+    progress.step = 'Syncing Movies';
+    this.syncProgressMap.set(providerId, { ...progress });
+
+    const existingMovies = await this.prisma.movie.findMany({
+      where: { providerId },
+      select: { id: true, providerStreamId: true }
+    });
+    const existingMovieMap = new Set(existingMovies.map(m => m.providerStreamId));
+
+    const moviesToInsert = movies
+      .map(m => ({
+        providerId,
+        movieCategoryId: movieCatIdMap.get(m.providerCategoryId) || updatedMovieCats[0]?.id,
+        providerStreamId: m.providerStreamId,
+        name: m.name,
+        poster: Array.isArray(m.poster) ? (m.poster[0] || null) : (m.poster || null),
+        backdrop: null,
+        description: null,
+        year: null,
+        rating: null,
+        duration: null,
+        streamUrl: m.streamUrl
+      }))
+      .filter(m => m.movieCategoryId && !existingMovieMap.has(m.providerStreamId));
+
+    const downloadedMovieStreamIds = new Set(movies.map(m => m.providerStreamId));
+    const moviesToDelete = existingMovies
+      .filter(m => !downloadedMovieStreamIds.has(m.providerStreamId))
+      .map(m => m.id);
+
+    if (moviesToInsert.length > 0) {
+      await this.batchedInsert(this.prisma.movie, moviesToInsert, batchSize, progress, providerId, checkStopped);
+    } else {
+      progress.processedItems += movies.length;
+      this.syncProgressMap.set(providerId, { ...progress });
+    }
+
+    if (moviesToDelete.length > 0) {
+      for (let i = 0; i < moviesToDelete.length; i += batchSize) {
+        const batch = moviesToDelete.slice(i, i + batchSize);
+        await this.prisma.movie.deleteMany({ where: { id: { in: batch } } });
+      }
+    }
+
+    if (await checkStopped()) return;
+
+    // 4. Ingest Series
+    progress.step = 'Syncing TV Series';
+    this.syncProgressMap.set(providerId, { ...progress });
+
+    const existingSeries = await this.prisma.series.findMany({
+      where: { providerId },
+      select: { id: true, providerSeriesId: true }
+    });
+    const existingSeriesMap = new Set(existingSeries.map(s => s.providerSeriesId));
+
+    const seriesToInsert = seriesList
+      .map(s => ({
+        providerId,
+        seriesCategoryId: seriesCatIdMap.get(s.providerCategoryId) || updatedSeriesCats[0]?.id,
+        providerSeriesId: s.providerSeriesId,
+        name: s.name,
+        poster: Array.isArray(s.poster) ? (s.poster[0] || null) : (s.poster || null),
+        backdrop: Array.isArray(s.backdrop) ? (s.backdrop[0] || null) : (s.backdrop || null),
+        description: s.description || null,
+        year: s.year || null
+      }))
+      .filter(s => s.seriesCategoryId && !existingSeriesMap.has(s.providerSeriesId));
+
+    const downloadedSeriesIds = new Set(seriesList.map(s => s.providerSeriesId));
+    const seriesToDelete = existingSeries
+      .filter(s => !downloadedSeriesIds.has(s.providerSeriesId))
+      .map(s => s.id);
+
+    if (seriesToInsert.length > 0) {
+      await this.batchedInsert(this.prisma.series, seriesToInsert, batchSize, progress, providerId, checkStopped);
+    } else {
+      progress.processedItems += seriesList.length;
+      this.syncProgressMap.set(providerId, { ...progress });
+    }
+
+    if (seriesToDelete.length > 0) {
+      for (let i = 0; i < seriesToDelete.length; i += batchSize) {
+        const batch = seriesToDelete.slice(i, i + batchSize);
+        await this.prisma.series.deleteMany({ where: { id: { in: batch } } });
+      }
     }
   }
 
