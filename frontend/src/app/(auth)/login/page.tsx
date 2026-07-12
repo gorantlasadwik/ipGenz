@@ -29,6 +29,12 @@ export default function LoginPage() {
         localStorage.setItem("isDemo", "false")
       }
 
+      if (data.user?.email === "srk@ipgenz.com" || email.toLowerCase() === "srk") {
+        localStorage.setItem("isSrk", "true")
+      } else {
+        localStorage.setItem("isSrk", "false")
+      }
+
       if (data.user?.isPremiumTrial) {
         localStorage.setItem("isPremiumTrial", "true")
         localStorage.setItem("trialExpiry", data.user?.trialExpiry || "")

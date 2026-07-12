@@ -25,6 +25,7 @@ export function TopNav() {
     localStorage.removeItem("isDemo")
     localStorage.removeItem("isPremiumTrial")
     localStorage.removeItem("trialExpiry")
+    localStorage.removeItem("isSrk")
     router.push("/login")
   }
 

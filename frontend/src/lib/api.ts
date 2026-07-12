@@ -15,6 +15,7 @@ const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Resp
         localStorage.removeItem('isDemo');
         localStorage.removeItem('isPremiumTrial');
         localStorage.removeItem('trialExpiry');
+        localStorage.removeItem('isSrk');
         window.location.href = '/login';
       }
     }

@@ -74,6 +74,9 @@ export class PlaybackSession {
         // Never chase the live edge — buffer stability matters more
         liveBufferLatencyChasing: false,
         liveSync: false,
+        liveSyncTargetLatency: 25,
+        liveSyncMaxLatency: 35,
+        liveBufferLatencyChasingStartBoundary: 35,
       }
     )
 

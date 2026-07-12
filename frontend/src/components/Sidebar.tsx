@@ -26,6 +26,7 @@ export function Sidebar() {
     localStorage.removeItem("token")
     localStorage.removeItem("profileId")
     localStorage.removeItem("isDemo")
+    localStorage.removeItem("isSrk")
     router.push("/login")
   }
 

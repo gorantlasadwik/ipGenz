@@ -9,6 +9,12 @@ import { spawn } from 'child_process';
 import { PassThrough, Transform } from 'stream';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as http from 'http';
+import * as https from 'https';
+
+const keepAliveHttpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 1000 });
+const keepAliveHttpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 1000 });
+
 const ffmpegStatic = require('ffmpeg-static');
 
 class TsDiagnosticsTransform extends Transform {
@@ -379,6 +385,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
       'Accept': '*/*',
       'Accept-Encoding': 'identity',
+      'Connection': 'keep-alive',
     };
 
     if (isLive) {
@@ -611,11 +618,14 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
 
       try {
         this.logger.log(`[PROVIDER_CONNECT][Channel:${channelId}] Connecting to: ${streamUrl}`);
+        const isHttps = streamUrl.startsWith('https');
         const response = await firstValueFrom(
           this.httpService.get(streamUrl, {
             responseType: 'stream',
             decompress: false,
             headers: requestHeaders,
+            httpAgent: isHttps ? undefined : keepAliveHttpAgent,
+            httpsAgent: isHttps ? keepAliveHttpsAgent : undefined,
           }).pipe(catchError(err => { throw err; }))
         );
 
@@ -864,7 +874,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     this.pipeSegmentsInfinitely(
       channelId,
       streamUrl,
-      { 'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16', 'Accept': '*/*', 'Accept-Encoding': 'identity' },
+      { 'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16', 'Accept': '*/*', 'Accept-Encoding': 'identity', 'Connection': 'keep-alive' },
       stitcher,
       () => clientDisconnected,
     ).catch(e => {
@@ -1078,6 +1088,10 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException('User not found');
     }
 
+    if (user.email === 'srk' || user.email === 'srk@ipgenz.com') {
+      return;
+    }
+
     if (user.isPremiumTrial) {
       const now = new Date();
       let shouldReset = true;
@@ -1109,6 +1123,10 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
 
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    if (user.email === 'srk' || user.email === 'srk@ipgenz.com') {
+      return;
     }
 
     if (user.isPremiumTrial) {

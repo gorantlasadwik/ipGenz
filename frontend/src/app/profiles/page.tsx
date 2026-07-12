@@ -48,6 +48,7 @@ export default function ProfilesPage() {
     }).catch((err) => {
       if (err.message === 'Unauthorized') {
         localStorage.removeItem('token')
+        localStorage.removeItem('isSrk')
         router.push('/login')
       } else {
         setLoading(false)
