@@ -17,6 +17,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   const playerRef = useRef<Player | null>(null)
   const mpegtsPlayerRef = useRef<any>(null)
   const settingsRef = useRef<HTMLDivElement>(null)
+  // Pre-loaded mpegts.js module — stored in a ref so button click handlers can use it synchronously
+  const mpegtsRef = useRef<any>(null)
+  // Guard ref to prevent double-triggering the transcode reload (MSE error + MEDIA_INFO can both fire)
+  const transcodeTriggeredRef = useRef(false)
 
   // Player controls states
   const [aspectRatio, setAspectRatio] = useState<'contain' | 'stretch' | 'zoom' | '16:9' | '4:3'>('contain')
@@ -26,6 +30,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   const [isTranscodingRequired, setIsTranscodingRequired] = useState(false)
   // Set to true when client-side PMT parsing detects a codec the browser can't play natively (AC3/EAC3/MP2)
   const [clientDetectedTranscodeNeeded, setClientDetectedTranscodeNeeded] = useState(false)
+  // Show a button overlay when AC3 is detected — user click provides the gesture Chrome needs for play()
+  const [showEnableAudioButton, setShowEnableAudioButton] = useState(false)
   // Use a ref so we can read the latest value inside selectAudioTrack without triggering re-renders
   const isTranscodingRequiredRef = useRef(false)
 
@@ -178,6 +184,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   useEffect(() => {
     setAudioTracks([])
     setClientDetectedTranscodeNeeded(false)
+    setShowEnableAudioButton(false)
+    transcodeTriggeredRef.current = false
     
     if (rawSourceUrl && rawSourceUrl.includes('/stream/')) {
       const isMovie = rawSourceUrl.includes('/stream/movie/')
@@ -209,9 +217,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
           console.log(`[VideoPlayer] Client-side PMT parser found ${parsed.length} audio stream(s):`, parsed)
           const primaryCodec = parsed[0]?.codec || 'AAC'
           const canPlay = browserCanPlayCodec(primaryCodec)
-          if (!canPlay) {
+          // Only set transcoding needed if not already showing the button (which has its own handler)
+          if (!canPlay && !transcodeTriggeredRef.current) {
             console.log(`[VideoPlayer] Browser cannot natively play '${primaryCodec}' — enabling server-side audio transcoding (AC3→AAC)...`)
+            transcodeTriggeredRef.current = true
             setClientDetectedTranscodeNeeded(true)
+          } else if (!canPlay) {
+            console.log(`[VideoPlayer] Browser cannot natively play '${primaryCodec}' — Enable Audio button already shown, skipping auto-reload`)
           } else {
             console.log(`[VideoPlayer] Browser natively supports '${primaryCodec}' — using direct stream (zero server overhead)`)
           }
@@ -354,6 +366,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
     }
   }
 
+  const resetVideoElement = () => {
+    if (videoRef.current) {
+      try {
+        videoRef.current.pause()
+        videoRef.current.removeAttribute('src')
+        videoRef.current.load()
+      } catch (e) {
+        console.warn("Failed to reset video element:", e)
+      }
+    }
+  }
+
   const selectAudioTrack = (id: number) => {
     setAudioTracks(prev => prev.map(t => ({ ...t, active: t.id === id })))
     // Always use backend PID filter for track switching on live streams.
@@ -382,6 +406,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
       // Dynamically import mpegts.js on client side to avoid SSR errors
       import('mpegts.js').then((mpegtsModule) => {
         const mpegts = mpegtsModule.default
+        // Cache module ref so button handlers can use it synchronously (within user gesture)
+        mpegtsRef.current = mpegts
 
         if (videoRef.current && mpegts.getFeatureList().mseLivePlayback) {
           // Clean up previous mpegts player
@@ -394,6 +420,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
               console.error("Error cleaning up previous mpegts player:", e)
             }
             mpegtsPlayerRef.current = null
+            resetVideoElement()
           }
 
           const sourceUrlToPlay = sourceUrl
@@ -415,14 +442,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             // check if the browser supports it. If not (AC3/EAC3/MP2), switch to transcoded URL.
             mpegtsPlayer.on(mpegts.Events.MEDIA_INFO, () => {
               try {
-                const info = mpegtsPlayer.mediaInfo
+                const info = mpegtsPlayer.mediaInfo as any
                 // audioCodec from mpegts.js is in format like 'ac-3', 'ec-3', 'mp4a.40.2'
                 const rawCodec = (info?.audioCodec || '').toLowerCase()
                 const isUnsupported = rawCodec.includes('ac-3') || rawCodec.includes('ac3') ||
                   rawCodec.includes('ec-3') || rawCodec.includes('eac3') ||
                   rawCodec.includes('mp2') || rawCodec === 'audio'
 
-                if (isUnsupported && !sourceUrlToPlay.includes('transcode=audio')) {
+                if (isUnsupported && !sourceUrlToPlay.includes('transcode=audio') && !transcodeTriggeredRef.current) {
+                  transcodeTriggeredRef.current = true
                   console.log(`[VideoPlayer] mpegts detected unsupported audio codec '${rawCodec}' — switching to server-side transcoding...`)
                   setClientDetectedTranscodeNeeded(true) // triggers sourceUrl update → player reloads
                 } else {
@@ -438,9 +466,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
               // Correct mpegts.js error types: type='MediaError', detail='MediaMSEError'
               // This is fired when the browser's MSE cannot decode the codec (e.g. AC3/EAC3)
               const isMseCodecError = type === 'MediaError' && detail === 'MediaMSEError'
-              if (isMseCodecError && !sourceUrlToPlay.includes('transcode=audio') && !sourceUrlToPlay.includes('transcode=video')) {
-                console.log('[VideoPlayer] AC3/EAC3 codec rejected by MSE — switching to server-side audio transcoding...')
-                setClientDetectedTranscodeNeeded(true)
+              if (isMseCodecError && !sourceUrlToPlay.includes('transcode=audio') && !transcodeTriggeredRef.current) {
+                transcodeTriggeredRef.current = true
+                console.log('[VideoPlayer] AC3/EAC3 codec rejected by MSE — showing Enable Audio button...')
+                // Show a button instead of auto-reloading — the user's click gives Chrome
+                // the gesture context needed to allow play() on the transcoded stream.
+                setShowEnableAudioButton(true)
               }
             })
 
@@ -453,6 +484,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
             }, 2000)
 
             if (options.autoplay) {
+              // Simple play — the user gesture is preserved when this runs within
+              // a click handler (Enable Audio button) or from initial channel selection.
               const playPromise = mpegtsPlayer.play()
               if (playPromise && typeof playPromise.catch === 'function') {
                 playPromise.catch((err: any) => {
@@ -574,6 +607,61 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
         controls
         playsInline
       />
+
+      {/* Enable Audio Overlay — shown when AC3/Dolby audio is detected */}
+      {showEnableAudioButton && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <button
+            onClick={() => {
+              setShowEnableAudioButton(false)
+              transcodeTriggeredRef.current = true
+
+              const transcodeUrl = `${rawSourceUrl}${rawSourceUrl.includes('?') ? '&' : '?'}transcode=audio`
+              const mpegts = mpegtsRef.current
+
+              if (!mpegts || !videoRef.current) {
+                // Fallback: use React state (slower but works)
+                setClientDetectedTranscodeNeeded(true)
+                return
+              }
+
+              // Imperatively recreate the player SYNCHRONOUSLY within the user gesture
+              // so play() is called before Chrome's gesture context expires
+              if (mpegtsPlayerRef.current) {
+                try {
+                  mpegtsPlayerRef.current.unload()
+                  mpegtsPlayerRef.current.detachMediaElement()
+                  mpegtsPlayerRef.current.destroy()
+                } catch (e) {}
+                mpegtsPlayerRef.current = null
+              }
+
+              resetVideoElement()
+
+              const player = mpegts.createPlayer(
+                { type: 'mpegts', isLive: true, url: transcodeUrl },
+                { enableWorker: true, enableStashBuffer: false, stashInitialSize: 128 }
+              )
+              mpegtsPlayerRef.current = player
+              player.attachMediaElement(videoRef.current)
+              player.load()
+
+              // play() called synchronously here — user gesture context still active!
+              const playPromise = player.play()
+              if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch((err: any) => console.warn('Enable Audio play failed:', err))
+              }
+            }}
+            className="flex flex-col items-center gap-3 px-8 py-5 bg-red-600 hover:bg-red-500 active:bg-red-700 rounded-2xl text-white font-bold shadow-2xl transition-all transform hover:scale-105 active:scale-95"
+          >
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+            </svg>
+            <span className="text-sm">Enable Audio</span>
+            <span className="text-xs text-red-200 font-normal">Dolby AC3 detected — tap to activate</span>
+          </button>
+        </div>
+      )}
 
       {/* Premium Floating Controls Overlay */}
       <div ref={settingsRef} className={`absolute top-4 right-4 z-30 transition-opacity duration-300 ${showSettings ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
