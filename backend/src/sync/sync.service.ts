@@ -204,21 +204,48 @@ export class SyncService {
         year: s.year || null
       })).filter(s => s.seriesCategoryId);
 
-      // 4. Ingest channels, movies, and series parallelly
-      progress.step = 'Ingesting Content';
-      progress.message = 'Saving channels, movies, and series...';
-      this.syncProgressMap.set(providerId, { ...progress });
+      // 4. Ingest channels, movies, and series sequentially to report real-time progress accurately
+      progress.totalItems = totalRealItems;
+      progress.processedItems = 0;
 
-      await Promise.all([
-        channelsToInsert.length > 0 ? this.prisma.liveChannel.createMany({ data: channelsToInsert, skipDuplicates: true }) : Promise.resolve(),
-        moviesToInsert.length > 0 ? this.prisma.movie.createMany({ data: moviesToInsert, skipDuplicates: true }) : Promise.resolve(),
-        seriesToInsert.length > 0 ? this.prisma.series.createMany({ data: seriesToInsert, skipDuplicates: true }) : Promise.resolve()
-      ]);
+      // Ingest Channels
+      if (channelsToInsert.length > 0) {
+        progress.step = 'Syncing Live Channels';
+        progress.message = `Saving ${channelsToInsert.length} channels...`;
+        this.syncProgressMap.set(providerId, { ...progress });
+        await this.prisma.liveChannel.createMany({ data: channelsToInsert, skipDuplicates: true });
+        progress.processedItems += channelsToInsert.length;
+        this.syncProgressMap.set(providerId, { ...progress });
+      }
+
+      if (await checkStopped()) return;
+
+      // Ingest Movies
+      if (moviesToInsert.length > 0) {
+        progress.step = 'Syncing Movies';
+        progress.message = `Saving ${moviesToInsert.length} movies...`;
+        this.syncProgressMap.set(providerId, { ...progress });
+        await this.prisma.movie.createMany({ data: moviesToInsert, skipDuplicates: true });
+        progress.processedItems += moviesToInsert.length;
+        this.syncProgressMap.set(providerId, { ...progress });
+      }
+
+      if (await checkStopped()) return;
+
+      // Ingest Series
+      if (seriesToInsert.length > 0) {
+        progress.step = 'Syncing TV Series';
+        progress.message = `Saving ${seriesToInsert.length} series...`;
+        this.syncProgressMap.set(providerId, { ...progress });
+        await this.prisma.series.createMany({ data: seriesToInsert, skipDuplicates: true });
+        progress.processedItems += seriesToInsert.length;
+        this.syncProgressMap.set(providerId, { ...progress });
+      }
 
       // Sync completed
       progress.status = 'COMPLETED';
       progress.step = 'Completed';
-      progress.message = `Successfully synced ${totalRealItems} items!`;
+      progress.message = `Successfully synced all ${totalRealItems} items!`;
       this.syncProgressMap.set(providerId, { ...progress });
 
       try {
