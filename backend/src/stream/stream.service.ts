@@ -722,7 +722,20 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
             tsDiagnostics.pipe(sink, { end: false });
           }
 
+          let heartbeatTimer: NodeJS.Timeout | null = null;
+          const resetHeartbeat = () => {
+            if (heartbeatTimer) clearTimeout(heartbeatTimer);
+            heartbeatTimer = setTimeout(() => {
+              this.logger.warn(`[PROVIDER_TIMEOUT][Channel:${channelId}] No data received from provider for 3000ms. Reconnecting...`);
+              try { response.data.destroy(); } catch (_) {}
+            }, 3000);
+          };
+
           const cleanup = () => {
+            if (heartbeatTimer) {
+              clearTimeout(heartbeatTimer);
+              heartbeatTimer = null;
+            }
             try { response.data.unpipe(); } catch (_) {}
             try { if (tsDiagnostics) tsDiagnostics.unpipe(); } catch (_) {}
             try { if (outputNode) outputNode.unpipe(); } catch (_) {}
@@ -735,7 +748,11 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
             }
           };
 
+          // Start the inactivity watchdog timer
+          resetHeartbeat();
+
           response.data.on('data', (chunk: Buffer) => {
+            resetHeartbeat();
             totalBytesWritten += chunk.length;
           });
 
