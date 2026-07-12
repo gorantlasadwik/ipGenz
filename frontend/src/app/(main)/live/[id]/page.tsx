@@ -2,18 +2,16 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { Heart, ArrowLeft, Play } from "lucide-react"
+import { Heart, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { api } from "@/lib/api"
-import { VideoPlayer } from "@/components/VideoPlayer"
-import { useRef } from "react"
+import { LivePlayer } from "@/components/LivePlayer"
 
 export default function LiveChannelPage() {
   const params = useParams()
   const [channel, setChannel] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isFavorite, setIsFavorite] = useState(false)
-  const playerRef = useRef<any>(null)
 
   useEffect(() => {
     if (params.id) {
@@ -22,7 +20,6 @@ export default function LiveChannelPage() {
         setLoading(false)
       }).catch(() => setLoading(false))
 
-      // Get favorites to check status
       const profileId = localStorage.getItem("profileId")
       if (profileId) {
         api.getFavorites(profileId).then(favs => {
@@ -62,19 +59,6 @@ export default function LiveChannelPage() {
   }
 
   const streamUrl = api.streamLiveUrl(channel.id)
-  const isMpegTs = channel.streamUrl?.includes('.ts') || false
-  const streamType = isMpegTs ? "video/mp2t" : "application/x-mpegURL"
-
-  const videoJsOptions = {
-    autoplay: true,
-    controls: true,
-    responsive: true,
-    fluid: true,
-    sources: [{
-      src: streamUrl,
-      type: streamType
-    }]
-  }
 
   return (
     <div className="w-full h-full flex flex-col bg-zinc-950 text-white overflow-y-auto pb-12">
@@ -98,11 +82,11 @@ export default function LiveChannelPage() {
           </div>
         </div>
 
-        <button 
+        <button
           onClick={handleFavoriteToggle}
           className={`p-3 rounded-full transition backdrop-blur-md border ${
-            isFavorite 
-              ? "bg-primary/20 border-primary text-primary hover:bg-primary/30" 
+            isFavorite
+              ? "bg-primary/20 border-primary text-primary hover:bg-primary/30"
               : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10 hover:text-white"
           }`}
         >
@@ -110,10 +94,17 @@ export default function LiveChannelPage() {
         </button>
       </div>
 
-      {/* Video Player Section */}
+      {/* ── IPGenZ Live Player v2 ── */}
       <div className="px-6 mt-6 max-w-6xl w-full mx-auto">
         <div className="aspect-video w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-black">
-          <VideoPlayer options={videoJsOptions} />
+          <LivePlayer
+            channelId={channel.id}
+            streamUrl={streamUrl}
+            channelName={channel.name}
+            autoplay={true}
+            onStateChange={s => console.log('[LivePlayer] State:', s)}
+            onError={err => console.error('[LivePlayer] Error:', err)}
+          />
         </div>
       </div>
 
