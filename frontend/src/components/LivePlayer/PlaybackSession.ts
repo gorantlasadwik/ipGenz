@@ -1,7 +1,6 @@
 // ─── IPGenZ Live Player v4 — Playback Session ────────────────────────────────
 // Each playback is an isolated session. Sessions are disposable.
-// Uses hls.js for Chrome/Firefox/Edge and native HTML5 HLS for Safari/iOS.
-// Owns: the hls.js instance, event bindings, and audio track switching.
+// Uses mpegts.js for direct, zero-disk-IO memory streaming.
 
 import type { SessionConfig, AudioTrack } from './types'
 import type { EventManager } from './EventManager'
@@ -9,13 +8,14 @@ import type { CodecManager } from './CodecManager'
 import type { BufferManager } from './BufferManager'
 
 export class PlaybackSession {
-  private hlsPlayer: any = null
-  private HlsLib: any = null
+  private mpegtsPlayer: any = null
+  private mpegtsLib: any = null
   private destroyed = false
   private playStarted = false
+  private transcodeTriggered = false
   readonly id: string
 
-  /** The HLS playlist URL currently being played. */
+  /** The stream URL currently being played. */
   activeUrl: string
 
   constructor(
@@ -33,161 +33,120 @@ export class PlaybackSession {
     if (this.destroyed) return
     this.events.emit('STATE_CHANGE', 'initializing')
 
-    // 1. Try loading hls.js
     try {
-      const hlsModule = await import('hls.js')
-      this.HlsLib = hlsModule.default
+      const mpegtsModule = await import('mpegts.js')
+      this.mpegtsLib = mpegtsModule.default
     } catch (e) {
-      this.loggerWarn('Failed to import hls.js pack')
+      this.events.emit('ERROR', 'Failed to load mpegts.js player engine')
+      return
     }
 
     if (this.destroyed) return
 
-    // 2. Choose player engine (hls.js vs Native Safari)
-    if (this.HlsLib && this.HlsLib.isSupported()) {
-      this.createHlsPlayer(this.activeUrl)
-    } else if (this.videoEl.canPlayType('application/vnd.apple.mpegurl')) {
-      this.createNativePlayer(this.activeUrl)
+    if (this.mpegtsLib.getFeatureList().mseLivePlayback) {
+      this.createMpegtsPlayer(this.activeUrl)
     } else {
-      this.events.emit('ERROR', 'HLS playback is not supported in this browser.')
+      this.events.emit('ERROR', 'MSE (MPEG-TS) live playback not supported in this browser')
     }
   }
 
-  private createHlsPlayer(url: string): void {
-    if (this.destroyed || !this.HlsLib || !this.videoEl) return
+  private createMpegtsPlayer(url: string): void {
+    if (this.destroyed || !this.mpegtsLib || !this.videoEl) return
 
     this.resetVideoElement()
 
-    const hls = new this.HlsLib({
-      enableWorker: true,
-      lowLatencyMode: false,
-      // Play 6 segments behind live for maximum buffer depth and connection drop recovery
-      liveSyncDurationCount: 6,
-      // Do not speed up playback to catch live edge (prevents eating into our own buffer)
-      maxLiveSyncPlaybackRate: 1.0,
-      manifestLoadingMaxRetry: 20,
-      manifestLoadingRetryDelay: 1000,
-      fragLoadingMaxRetry: 10,
-      fragLoadingRetryDelay: 1000,
-    })
+    const player = this.mpegtsLib.createPlayer(
+      { type: 'mpegts', isLive: true, url },
+      {
+        enableWorker: true,
+        enableStashBuffer: true,
+        stashInitialSize: 512 * 1024,
+        lazyLoad: false,
+        liveBufferLatencyChasing: true,
+        liveBufferLatencyMaxLatency: 6,
+        liveBufferLatencyMinRemain: 2,
+        liveSync: true,
+        liveSyncTargetLatency: 4,
+        liveSyncMaxLatency: 8,
+        liveBufferLatencyChasingStartBoundary: 6,
+      }
+    )
 
-    this.hlsPlayer = hls
-    hls.attachMedia(this.videoEl)
-
-    hls.on(this.HlsLib.Events.MEDIA_ATTACHED, () => {
-      hls.loadSource(url)
-    })
+    this.mpegtsPlayer = player
+    player.attachMediaElement(this.videoEl)
 
     // ── Codec and Audio Track Detection ──────────────────────────────────────
-    hls.on(this.HlsLib.Events.MANIFEST_PARSED, (event: any, data: any) => {
+    player.on(this.mpegtsLib.Events.MEDIA_INFO, () => {
       if (this.destroyed) return
+      try {
+        const info = player.mediaInfo as any
+        const rawAudio = (info?.audioCodec || '').toLowerCase()
+        const audioCodec = this.codecManager.parseAudioCodecFromMediaInfo(rawAudio)
+        const videoCodec = this.codecManager.parseVideoCodecFromMediaInfo(info?.videoCodec || '')
 
-      const audioCodec = 'AAC' // Backend converts AC3/EAC3/DTS to AAC
-      const videoCodec = 'H264'
-      this.events.emit('CODEC_DETECTED', { audioCodec, videoCodec, resolution: 'Auto' })
-
-      // Emit audio tracks if present
-      this.emitHlsAudioTracks()
-
-      this.events.emit('STATE_CHANGE', 'buffering')
-
-      if (this.config.autoplay) {
-        this.bufferManager.reset()
-        this.bufferManager.onBufferReady(() => {
-          if (this.destroyed || this.playStarted) return
-          this.playStarted = true
-          console.log(`[PlaybackSession:${this.id}] HLS buffer ready — playing`)
-          this.videoEl.play().catch((err: any) => {
-            if (err?.name === 'NotAllowedError') {
-              this.events.emit('AUTOPLAY_BLOCKED')
-            }
+        const audioTracks: AudioTrack[] = []
+        if (info?.audioStreams?.length > 0) {
+          info.audioStreams.forEach((s: any, idx: number) => {
+            audioTracks.push({
+              id: idx,
+              label: `Track ${idx + 1} (${(s.language || 'und').toUpperCase()}) [${this.codecManager.parseAudioCodecFromMediaInfo(s.codec || '')}]`,
+              language: s.language || 'und',
+              codec: this.codecManager.parseAudioCodecFromMediaInfo(s.codec || ''),
+              active: idx === 0,
+            })
           })
-        })
-      }
-    })
+        } else {
+          audioTracks.push({ id: 0, label: 'Default Audio', language: 'und', codec: audioCodec, active: true })
+        }
 
-    hls.on(this.HlsLib.Events.AUDIO_TRACKS_UPDATED, () => {
-      this.emitHlsAudioTracks()
+        this.events.emit('CODEC_DETECTED', { audioCodec, videoCodec, resolution: `${info?.width || 0}x${info?.height || 0}` })
+        this.events.emit('AUDIO_TRACKS_READY', audioTracks)
+
+        // Request server-side transcode if audio codec is AC3/EAC3/DTS and not yet triggered
+        if (!this.codecManager.browserCanPlayAudio(audioCodec) && !this.transcodeTriggered) {
+          this.transcodeTriggered = true
+          console.log(`[PlaybackSession:${this.id}] Unsupported codec '${audioCodec}' — requesting audio transcode`)
+          this.events.emit('TRANSCODE_NEEDED', audioCodec)
+        }
+      } catch (e) {
+        console.warn(`[PlaybackSession:${this.id}] MEDIA_INFO parse error:`, e)
+      }
     })
 
     // ── Error recovery ───────────────────────────────────────────────────────
-    hls.on(this.HlsLib.Events.ERROR, (event: any, data: any) => {
+    player.on(this.mpegtsLib.Events.ERROR, (type: string, detail: string, info: any) => {
       if (this.destroyed) return
-      console.warn(`[PlaybackSession:${this.id}] hls.js error:`, data.type, data.details, data.fatal)
+      console.warn(`[PlaybackSession:${this.id}] mpegts.js error:`, type, detail)
 
-      if (data.fatal) {
-        switch (data.type) {
-          case this.HlsLib.ErrorTypes.NETWORK_ERROR:
-            console.log(`[PlaybackSession:${this.id}] Fatal network error — retrying connection`)
-            hls.startLoad()
-            break;
-          case this.HlsLib.ErrorTypes.MEDIA_ERROR:
-            console.log(`[PlaybackSession:${this.id}] Fatal media error — trying recovery`)
-            hls.recoverMediaError()
-            break;
-          default:
-            this.events.emit('PLAYER_ERROR', { type: data.type, detail: data.details })
-            break;
-        }
+      const isMseCodecError = type === 'MediaError' && detail === 'MediaMSEError'
+      if (isMseCodecError && !this.transcodeTriggered) {
+        this.transcodeTriggered = true
+        this.events.emit('TRANSCODE_NEEDED', 'UNKNOWN')
+        return
       }
+
+      this.events.emit('PLAYER_ERROR', { type, detail, info })
     })
-  }
 
-  private emitHlsAudioTracks(): void {
-    if (!this.hlsPlayer) return
-    const tracks = this.hlsPlayer.audioTracks || []
-    const mapped: AudioTrack[] = tracks.map((t: any, idx: number) => ({
-      id: idx,
-      label: t.name || `Track ${idx + 1} (${(t.lang || 'und').toUpperCase()})`,
-      language: t.lang || 'und',
-      codec: 'AAC',
-      active: idx === this.hlsPlayer.audioTrack,
-    }))
-    if (mapped.length > 0) {
-      this.events.emit('AUDIO_TRACKS_READY', mapped)
-    }
-  }
+    player.load()
+    this.events.emit('STATE_CHANGE', 'buffering')
 
-  private createNativePlayer(url: string): void {
-    if (this.destroyed || !this.videoEl) return
-
-    this.resetVideoElement()
-
-    this.videoEl.src = url
-    this.videoEl.load()
-
-    this.videoEl.addEventListener('loadedmetadata', () => {
-      if (this.destroyed) return
-
-      // Parse native audio tracks if browser supports it
-      const nativeTracks = (this.videoEl as any).audioTracks
-      if (nativeTracks && nativeTracks.length > 0) {
-        const tracks: AudioTrack[] = []
-        for (let i = 0; i < nativeTracks.length; i++) {
-          tracks.push({
-            id: i,
-            label: nativeTracks[i].label || `Track ${i + 1} (${(nativeTracks[i].language || 'und').toUpperCase()})`,
-            language: nativeTracks[i].language || 'und',
-            codec: 'AAC',
-            active: nativeTracks[i].enabled,
-          })
-        }
-        this.events.emit('AUDIO_TRACKS_READY', tracks)
-      }
-
-      if (this.config.autoplay) {
-        this.bufferManager.reset()
-        this.bufferManager.onBufferReady(() => {
-          if (this.destroyed || this.playStarted) return
-          this.playStarted = true
-          this.videoEl.play().catch((err: any) => {
+    if (this.config.autoplay) {
+      this.bufferManager.reset()
+      this.bufferManager.onBufferReady(() => {
+        if (this.destroyed || this.playStarted) return
+        this.playStarted = true
+        console.log(`[PlaybackSession:${this.id}] Buffer ready — playing`)
+        const pp = player.play()
+        if (pp && typeof pp.catch === 'function') {
+          pp.catch((err: any) => {
             if (err?.name === 'NotAllowedError') {
               this.events.emit('AUTOPLAY_BLOCKED')
             }
           })
-        })
-      }
-    })
+        }
+      })
+    }
   }
 
   private resetVideoElement(): void {
@@ -198,59 +157,34 @@ export class PlaybackSession {
     } catch {}
   }
 
-  /**
-   * Switch the active audio track on the client side (instant, zero buffer reset).
-   */
-  selectAudioTrack(trackId: number): void {
-    if (this.destroyed) return
-
-    if (this.hlsPlayer) {
-      this.loggerLog(`Switching hls.js audio track to ${trackId}`)
-      this.hlsPlayer.audioTrack = trackId
-    } else {
-      const nativeTracks = (this.videoEl as any).audioTracks
-      if (nativeTracks && nativeTracks.length > trackId) {
-        this.loggerLog(`Switching native audio track to ${trackId}`)
-        for (let i = 0; i < nativeTracks.length; i++) {
-          nativeTracks[i].enabled = i === trackId
-        }
-      }
-    }
-  }
-
   play(): void {
     this.playStarted = true
-    this.videoEl?.play().catch(() => {})
+    try { this.mpegtsPlayer?.play() } catch {}
   }
 
   pause(): void {
-    this.videoEl?.pause()
+    try { this.mpegtsPlayer?.pause() } catch {}
   }
 
   isDestroyed(): boolean {
     return this.destroyed
   }
 
-  private loggerLog(msg: string): void {
-    console.log(`[PlaybackSession:${this.id}] ${msg}`)
-  }
-
-  private loggerWarn(msg: string): void {
-    console.warn(`[PlaybackSession:${this.id}] ${msg}`)
-  }
-
   destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
-    this.loggerLog('Destroying session')
-
+    console.log(`[PlaybackSession:${this.id}] Destroying session`)
+    
     this.resetVideoElement()
 
-    if (this.hlsPlayer) {
+    if (this.mpegtsPlayer) {
       try {
-        this.hlsPlayer.destroy()
+        this.mpegtsPlayer.unload()
+        this.mpegtsPlayer.detachMediaElement()
+        this.mpegtsPlayer.destroy()
       } catch {}
-      this.hlsPlayer = null
+      this.mpegtsPlayer = null
     }
+    this.mpegtsLib = null
   }
 }

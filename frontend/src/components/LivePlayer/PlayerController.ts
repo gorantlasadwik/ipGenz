@@ -237,9 +237,24 @@ export class PlayerController {
 
   private buildCurrentUrl(): string {
     let url = this.baseStreamUrl
-    if (!url.includes('/playlist.m3u8')) {
-      // Convert standard /live/:id stream URL to HLS /live/:id/playlist.m3u8 URL
-      url = url.replace(/\/live\/([^\/?#]+)/, '/live/$1/playlist.m3u8')
+    try {
+      // Append query parameters dynamically using URL helper
+      const urlObj = new URL(url)
+      if (this.selectedAudioTrack !== undefined && this.selectedAudioTrack !== null) {
+        urlObj.searchParams.set('audioTrack', this.selectedAudioTrack.toString())
+      }
+      if (this.transcodeAudio) {
+        urlObj.searchParams.set('transcode', 'audio')
+      }
+      url = urlObj.toString()
+    } catch (_) {
+      // Fallback string manipulation if url parsing fails
+      if (this.selectedAudioTrack !== undefined && this.selectedAudioTrack !== null) {
+        url += (url.includes('?') ? '&' : '?') + `audioTrack=${this.selectedAudioTrack}`
+      }
+      if (this.transcodeAudio) {
+        url += (url.includes('?') ? '&' : '?') + 'transcode=audio'
+      }
     }
     return url
   }
@@ -253,7 +268,7 @@ export class PlayerController {
     }
 
     const url = this.buildCurrentUrl()
-    console.log(`[PlayerController] Starting new HLS session → ${url}`)
+    console.log(`[PlayerController] Starting new MPEG-TS session → ${url}`)
 
     const cfg: SessionConfig = {
       channelId: this.channelId,
@@ -268,7 +283,7 @@ export class PlayerController {
 
   private rebuildSession(): void {
     if (this.destroyed) return
-    console.log('[PlayerController] Rebuilding HLS session')
+    console.log('[PlayerController] Rebuilding MPEG-TS session')
     setTimeout(() => {
       if (!this.destroyed) this.startNewSession()
     }, 300)
@@ -280,13 +295,19 @@ export class PlayerController {
     this.selectedAudioTrack = trackId
     this.currentAudioTracks = this.currentAudioTracks.map(t => ({ ...t, active: t.id === trackId }))
 
-    // Instant client-side track switching (no reload or session rebuild!)
-    this.currentSession?.selectAudioTrack(trackId)
-    this.events.emit('AUDIO_TRACKS_READY', this.currentAudioTracks)
+    const selectedTrack = this.currentAudioTracks.find(t => t.id === trackId)
+    if (selectedTrack) {
+      this.transcodeAudio = !this.codec.browserCanPlayAudio(selectedTrack.codec)
+    }
+
+    this.rebuildSession()
   }
 
   enableAudioTranscode(): void {
-    // Legacy support
+    if (this.transcodeTriggered) return
+    this.transcodeTriggered = true
+    this.transcodeAudio = true
+    this.rebuildSession()
   }
 
   play(): void {

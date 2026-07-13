@@ -1005,10 +1005,111 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     transcode?: string,
     req?: any,
   ) {
-    this.logger.log(`[StreamService] Redirecting live channel ${channelId} request to HLS playlist`);
-    const token = req?.query?.token || req?.headers?.authorization?.replace('Bearer ', '') || '';
-    const redirectUrl = `/api/stream/live/${channelId}/playlist.m3u8?token=${token}`;
-    res.redirect(302, redirectUrl);
+    const channel = await this.prisma.liveChannel.findFirst({
+      where: { id: channelId, provider: { userId } },
+    });
+    if (!channel || !channel.streamUrl) {
+      if (!res.headersSent) res.status(404).send('Channel not found');
+      return;
+    }
+
+    const streamUrl = channel.streamUrl;
+
+    this.logger.log(`[StreamService] Starting direct MPEG-TS stream for channel ${channelId}`);
+
+    // Set headers for direct MPEG-TS streaming
+    res.setHeader('Content-Type', 'video/mp2t');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Connection', 'keep-alive');
+
+    const ffmpegPath = process.env.NODE_ENV === 'production' ? 'ffmpeg' : ffmpegStatic;
+    const isAudioTranscodeRequired = transcode === 'audio';
+    const isHlsInput = streamUrl.toLowerCase().includes('m3u8');
+    const inputArgs: string[] = [];
+
+    if (!isHlsInput) {
+      // Reconnect options for raw TS streams
+      inputArgs.push(
+        '-reconnect', '1',
+        '-reconnect_at_eof', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '5'
+      );
+    } else {
+      // Reconnect options for HLS segments download
+      inputArgs.push(
+        '-reconnect', '1',
+        '-reconnect_delay_max', '5'
+      );
+    }
+
+    const args: string[] = [
+      ...inputArgs,
+      '-fflags', '+genpts+discardcorrupt+igndts',
+      '-user_agent', 'VLC/3.0.16',
+      '-i', streamUrl,
+
+      // Map only first video stream and either the selected audio stream or all audio streams
+      '-map', '0:v:0',
+      audioTrack !== undefined ? '-map' : '-map',
+      audioTrack !== undefined ? `0:a:${audioTrack}` : '0:a?',
+
+      // Video: copy directly (0% CPU)
+      '-c:v', 'copy',
+    ];
+
+    if (isAudioTranscodeRequired) {
+      // Audio: transcode to standard AAC
+      args.push(
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ac', '2',
+        '-ar', '48000'
+      );
+    } else {
+      // Audio: copy directly (0% CPU)
+      args.push('-c:a', 'copy');
+    }
+
+    // Output options (avoid negative timestamps, make zero, pipe to stdout)
+    args.push(
+      '-avoid_negative_ts', 'make_zero',
+      '-max_muxing_queue_size', '4096',
+      '-f', 'mpegts',
+      'pipe:1'
+    );
+
+    this.logger.log(`[StreamService][Channel:${channelId}] Spawning FFmpeg direct proxy: ffmpeg ${args.join(' ')}`);
+
+    const ffmpegProcess = spawn(ffmpegPath, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    // Pipe direct stdout to the client HTTP response
+    ffmpegProcess.stdout.pipe(res);
+
+    ffmpegProcess.stderr.on('data', (data: Buffer) => {
+      const msg = data.toString().trim();
+      if (msg.includes('Error') || msg.includes('error') || msg.includes('warning') || msg.includes('Warning')) {
+        this.logger.warn(`[FFmpegStream:${channelId}] ${msg}`);
+      }
+    });
+
+    ffmpegProcess.on('close', (code) => {
+      this.logger.log(`[StreamService][Channel:${channelId}] FFmpeg process closed with code ${code}`);
+      if (!res.writableEnded) {
+        res.end();
+      }
+    });
+
+    req.on('close', () => {
+      this.logger.log(`[StreamService][Channel:${channelId}] Client connection closed. Terminating FFmpeg.`);
+      try {
+        ffmpegProcess.kill('SIGKILL');
+      } catch (_) {}
+    });
   }
 
   async getHlsPlaylist(channelId: string, userId: string, token: string, res: Response) {
