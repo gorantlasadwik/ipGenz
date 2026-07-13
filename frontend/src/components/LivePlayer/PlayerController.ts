@@ -236,11 +236,12 @@ export class PlayerController {
   }
 
   private buildCurrentUrl(): string {
-    return this.stream.buildUrl({
-      baseUrl: this.baseStreamUrl,
-      audioTrackId: this.selectedAudioTrack,
-      transcodeAudio: this.transcodeAudio,
-    })
+    let url = this.baseStreamUrl
+    if (!url.includes('/playlist.m3u8')) {
+      // Convert standard /live/:id stream URL to HLS /live/:id/playlist.m3u8 URL
+      url = url.replace(/\/live\/([^\/?#]+)/, '/live/$1/playlist.m3u8')
+    }
+    return url
   }
 
   private async startNewSession(): Promise<void> {
@@ -252,7 +253,7 @@ export class PlayerController {
     }
 
     const url = this.buildCurrentUrl()
-    console.log(`[PlayerController] Starting new session → ${url}`)
+    console.log(`[PlayerController] Starting new HLS session → ${url}`)
 
     const cfg: SessionConfig = {
       channelId: this.channelId,
@@ -267,7 +268,7 @@ export class PlayerController {
 
   private rebuildSession(): void {
     if (this.destroyed) return
-    console.log('[PlayerController] Rebuilding session')
+    console.log('[PlayerController] Rebuilding HLS session')
     setTimeout(() => {
       if (!this.destroyed) this.startNewSession()
     }, 300)
@@ -279,19 +280,13 @@ export class PlayerController {
     this.selectedAudioTrack = trackId
     this.currentAudioTracks = this.currentAudioTracks.map(t => ({ ...t, active: t.id === trackId }))
 
-    const selectedTrack = this.currentAudioTracks.find(t => t.id === trackId)
-    if (selectedTrack) {
-      this.transcodeAudio = !this.codec.browserCanPlayAudio(selectedTrack.codec)
-    }
-
-    this.rebuildSession()
+    // Instant client-side track switching (no reload or session rebuild!)
+    this.currentSession?.selectAudioTrack(trackId)
+    this.events.emit('AUDIO_TRACKS_READY', this.currentAudioTracks)
   }
 
   enableAudioTranscode(): void {
-    if (this.transcodeTriggered) return
-    this.transcodeTriggered = true
-    this.transcodeAudio = true
-    this.rebuildSession()
+    // Legacy support
   }
 
   play(): void {

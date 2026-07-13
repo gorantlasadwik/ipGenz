@@ -280,12 +280,13 @@ interface HlsSession {
 @Injectable()
 export class StreamService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(StreamService.name);
-  private hlsSessions = new Map<string, HlsSession>();
   private hlsCleanupInterval: any = null;
 
   // ─── Channel Worker Pool (one worker per active live channel) ──────────────
   private channelWorkers = new Map<string, ChannelWorker>();
-  /** Pending destroy timers — workers are kept alive for 60s after last subscriber */
+  /** Last active timestamp per channel to detect idle channels */
+  private hlsLastActive = new Map<string, number>();
+  /** Pending destroy timers — workers are kept alive for 30s after last subscriber */
   private workerIdleTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
@@ -304,19 +305,16 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       }
     }
     fs.mkdirSync(mainHlsDir, { recursive: true });
-    this.hlsCleanupInterval = setInterval(() => this.cleanupExpiredHlsSessions(), 10000);
+    // Clean up idle segmenters every 10 seconds
+    this.hlsCleanupInterval = setInterval(() => this.cleanupExpiredWorkers(), 10000);
   }
 
   onModuleDestroy() {
     if (this.hlsCleanupInterval) {
       clearInterval(this.hlsCleanupInterval);
     }
-    for (const session of this.hlsSessions.values()) {
-      this.destroyHlsSession(session);
-    }
-    this.hlsSessions.clear();
 
-    // Destroy all active channel workers
+    // Destroy all active channel workers and clear timers
     for (const [id, timer] of this.workerIdleTimers) {
       clearTimeout(timer);
     }
@@ -325,6 +323,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       worker.destroy();
     }
     this.channelWorkers.clear();
+    this.hlsLastActive.clear();
 
     const mainHlsDir = path.join(process.cwd(), 'temp_hls');
     if (fs.existsSync(mainHlsDir)) {
@@ -336,6 +335,20 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private cleanupExpiredWorkers() {
+    const now = Date.now();
+    const expiryThreshold = 30000; // 30 seconds idle
+    for (const [channelId, worker] of this.channelWorkers.entries()) {
+      const lastActive = this.hlsLastActive.get(channelId) || 0;
+      if (now - lastActive > expiryThreshold) {
+        this.logger.log(`[WorkerPool] Channel ${channelId} has been idle for 30s — destroying worker`);
+        worker.destroy();
+        this.channelWorkers.delete(channelId);
+        this.hlsLastActive.delete(channelId);
+      }
+    }
+  }
+
   /**
    * Get an existing ChannelWorker for this channel, or create and start one.
    * Workers are shared across all browser subscribers watching the same channel.
@@ -343,8 +356,6 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
   private async getOrCreateWorker(
     channelId: string,
     streamUrl: string,
-    audioTrackIndex: number,
-    transcodeAudio: boolean,
   ): Promise<ChannelWorker> {
     // Cancel any pending idle-destroy timer
     const idleTimer = this.workerIdleTimers.get(channelId);
@@ -355,26 +366,23 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
 
     const existing = this.channelWorkers.get(channelId);
     if (existing && existing.isRunning) {
-      this.logger.log(`[WorkerPool] Reusing existing worker for channel ${channelId}`);
       return existing;
     }
 
-    // Destroy stale worker if any
     if (existing) {
       existing.destroy();
       this.channelWorkers.delete(channelId);
     }
 
-    this.logger.log(`[WorkerPool] Creating new worker for channel ${channelId}`);
+    this.logger.log(`[WorkerPool] Creating new Live HLS Worker for channel ${channelId}`);
+    const tempDir = path.join(process.cwd(), 'temp_hls', channelId);
     const worker = new ChannelWorker(
       {
         channelId,
         streamUrl,
-        audioTrackIndex,
-        transcodeAudio,
-        ringCapacityBytes: 16 * 1024 * 1024, // 16MB — ~16s at 8Mbps, burst-fills browser on connect
+        tempDir,
       },
-      this.httpService, // Axios — handles redirects, CDN hops, auth
+      this.httpService,
     );
     this.channelWorkers.set(channelId, worker);
     await worker.start();
@@ -382,25 +390,25 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Unsubscribe a browser from a worker.
-   * If no subscribers remain, schedule the worker for destruction after 60s.
+   * Release worker subscriber. If no subscribers remain, schedules worker destroy in 30s.
    */
-  private releaseWorkerSubscriber(channelId: string, pt: PassThrough): void {
+  private releaseWorkerSubscriber(channelId: string): void {
     const worker = this.channelWorkers.get(channelId);
     if (!worker) return;
-    worker.unsubscribe(pt);
+    worker.decrementSubscribers();
 
     if (worker.subscriberCount === 0) {
-      this.logger.log(`[WorkerPool] No subscribers for ${channelId} — scheduling idle destroy in 60s`);
+      this.logger.log(`[WorkerPool] No active subscribers for ${channelId} — scheduling idle destroy in 30s`);
       const timer = setTimeout(() => {
         const w = this.channelWorkers.get(channelId);
         if (w && w.subscriberCount === 0) {
           this.logger.log(`[WorkerPool] Destroying idle worker for ${channelId}`);
           w.destroy();
           this.channelWorkers.delete(channelId);
+          this.hlsLastActive.delete(channelId);
         }
         this.workerIdleTimers.delete(channelId);
-      }, 60_000);
+      }, 30_000);
       this.workerIdleTimers.set(channelId, timer);
     }
   }
@@ -992,103 +1000,119 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
            lower.includes('surround');
   }
 
-  async proxyLiveStream(channelId: string, audioTrack: number | undefined, userId: string, res: Response, transcode?: string) {
-    this.logger.log(`Proxying Live Stream for channel: ${channelId}, audioTrack: ${audioTrack}, Transcode: ${transcode}`);
+  async proxyLiveStream(
+    channelId: string,
+    audioTrack: number | undefined,
+    userId: string,
+    res: Response,
+    transcode?: string,
+    req?: any,
+  ) {
+    this.logger.log(`[StreamService] Redirecting live channel ${channelId} request to HLS playlist`);
+    const token = req?.query?.token || req?.headers?.authorization?.replace('Bearer ', '') || '';
+    const redirectUrl = `/api/stream/live/${channelId}/playlist.m3u8?token=${token}`;
+    res.redirect(302, redirectUrl);
+  }
 
-    // Look up the real stream URL from the database and verify ownership
+  async getHlsPlaylist(channelId: string, userId: string, token: string, res: Response) {
     const channel = await this.prisma.liveChannel.findFirst({
       where: { id: channelId, provider: { userId } },
-      include: { provider: true },
     });
-
-    // If channel not found in DB, fall back to test stream for demo
-    const streamUrl = channel?.streamUrl || 'http://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
-
-    if (!channel) {
-      this.logger.warn(`Channel ${channelId} not found in DB, using test stream`);
+    if (!channel || !channel.streamUrl) {
+      throw new NotFoundException('Channel not found');
     }
 
-    // Run dynamic on-demand stream analysis if channel is real
-    let profile = null;
-    if (channel) {
+    const streamUrl = channel.streamUrl;
+    let worker = this.channelWorkers.get(channelId);
+
+    if (!worker || !worker.isRunning) {
       try {
-        profile = await this.codecService.getOrAnalyzeStream(
-          ContentType.CHANNEL,
-          channel.id,
-          streamUrl,
-          channel.providerId,
-        );
-      } catch (err) {
-        this.logger.error(`Failed to retrieve/analyze stream profile: ${err.message}`);
+        worker = await this.getOrCreateWorker(channelId, streamUrl);
+      } catch (err: any) {
+        this.logger.error(`[StreamService] Failed to start Live HLS worker for ${channelId}: ${err.message}`);
+        if (!res.headersSent) res.status(502).send('Stream Unavailable');
+        return;
       }
     }
 
-    const forceTranscode = transcode === 'audio' || transcode === 'video';
-    const transcodeType = transcode === 'video' ? 'VIDEO' : 'AUDIO';
+    // Keep active subscriber count and refresh lastActive activity
+    worker.incrementSubscribers();
+    this.hlsLastActive.set(channelId, Date.now());
 
-    // If client explicitly requested transcoding (detected unsupported codec client-side).
-    // isLive=true → segment stitcher keeps FFmpeg stdin open forever.
-    if (forceTranscode) {
-      return this.handleTranscodeStream(streamUrl, transcodeType as any, res, undefined, undefined, true, channelId, transcode);
+    // Cancel any pending idle destroy timers since we have an active subscriber
+    const idleTimer = this.workerIdleTimers.get(channelId);
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      this.workerIdleTimers.delete(channelId);
     }
 
-    // If a specific audio track is requested, transcode with stitcher (live).
-    if (audioTrack !== undefined) {
-      const type = (profile && profile.transcodeType === 'VIDEO') ? 'VIDEO' : 'AUDIO';
-      return this.handleTranscodeStream(streamUrl, type as any, res, audioTrack, undefined, true, channelId, transcode);
+    const tempDir = path.join(process.cwd(), 'temp_hls', channelId);
+    const playlistPath = path.join(tempDir, 'playlist.m3u8');
+
+    // Wait for the segmenter to output the playlist (max 8 seconds)
+    let attempts = 0;
+    while (!fs.existsSync(playlistPath) && attempts < 80) {
+      await new Promise(r => setTimeout(r, 100));
+      attempts++;
     }
 
-    // If profile (from background ffprobe cache) confirms transcoding is needed
-    if (profile && profile.transcodingRequired && profile.transcodeType) {
-      return this.handleTranscodeStream(streamUrl, profile.transcodeType as any, res, undefined, undefined, true, channelId, transcode || 'audio');
-    }
-
-    // ── CONTINUOUS WORKER: Ring Buffer Pipeline ────────────────────────────────
-    // A long-lived ChannelWorker maintains the provider connection and normalizes
-    // timestamps via a single FFmpeg process (-fflags +genpts, -c:v copy).
-    // Provider reconnects are transparent — FFmpeg keeps producing continuous TS.
-    // The browser reads from a ring buffer; it never knows the provider disconnected.
-
-    // Determine audio transcode needs from profile
-    const needsAudioTranscode = profile?.transcodingRequired && profile?.transcodeType === 'AUDIO';
-    const resolvedAudioTrack = audioTrack ?? 0;
-
-    res.set({
-      'Content-Type': 'video/mp2t',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0',
-      'Access-Control-Allow-Origin': '*',
-    });
-
-    let worker: ChannelWorker;
-    try {
-      worker = await this.getOrCreateWorker(
-        channelId,
-        streamUrl,
-        resolvedAudioTrack,
-        needsAudioTranscode ?? true,
-      );
-    } catch (err: any) {
-      this.logger.error(`[WorkerPool] Failed to start worker for ${channelId}: ${err.message}`);
-      if (!res.headersSent) res.status(502).send('Stream Unavailable');
+    if (!fs.existsSync(playlistPath)) {
+      this.logger.error(`[StreamService] HLS playlist generation timed out for channel ${channelId}`);
+      this.releaseWorkerSubscriber(channelId);
+      if (!res.headersSent) res.status(504).send('Transcoding Timeout');
       return;
     }
 
-    // Subscribe this browser client to the ring buffer
-    const subscriberPt = worker.subscribe();
-    subscriberPt.pipe(res);
+    try {
+      let content = fs.readFileSync(playlistPath, 'utf8');
+      // Append token parameter to each segment URL so segment requests are authorized
+      content = content.replace(/(seg_\d+\.ts)/g, `$1?token=${token}`);
 
-    res.on('close', () => {
-      this.logger.log(`[WorkerPool] Browser disconnected from ${channelId}`);
-      this.releaseWorkerSubscriber(channelId, subscriberPt);
+      res.set({
+        'Content-Type': 'application/x-mpegURL',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.send(content);
+    } catch (e: any) {
+      this.logger.error(`[StreamService] Error reading HLS playlist: ${e.message}`);
+      this.releaseWorkerSubscriber(channelId);
+      if (!res.headersSent) res.status(500).send('Internal Server Error');
+    }
+  }
+
+  async getHlsSegment(channelId: string, segmentName: string, res: Response) {
+    this.hlsLastActive.set(channelId, Date.now());
+
+    const worker = this.channelWorkers.get(channelId);
+    if (!worker) {
+      if (!res.headersSent) res.status(404).send('Session worker not found');
+      return;
+    }
+
+    const tempDir = path.join(process.cwd(), 'temp_hls', channelId);
+    const segmentPath = path.join(tempDir, segmentName);
+    if (!fs.existsSync(segmentPath)) {
+      if (!res.headersSent) res.status(404).send('Segment not found');
+      return;
+    }
+
+    res.set({
+      'Content-Type': 'video/mp2t',
+      'Cache-Control': 'max-age=3600',
+      'Access-Control-Allow-Origin': '*',
     });
 
-    subscriberPt.on('error', (err) => {
-      this.logger.warn(`[WorkerPool] Subscriber pipe error for ${channelId}: ${err.message}`);
-      this.releaseWorkerSubscriber(channelId, subscriberPt);
-      if (!res.writableEnded) res.end();
+    const stream = fs.createReadStream(segmentPath);
+    stream.on('end', () => {
+      this.releaseWorkerSubscriber(channelId);
     });
+    stream.on('error', () => {
+      this.releaseWorkerSubscriber(channelId);
+    });
+    stream.pipe(res);
   }
 
   async getLiveStreamInfo(channelId: string, userId: string) {
@@ -1432,168 +1456,5 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     } catch (e) {
       res.status(500).send('Failed to download episode');
     }
-  }
-
-  private destroyHlsSession(session: HlsSession) {
-    this.logger.log(`Cleaning up HLS session for channel ${session.channelId}`);
-    session.isClientDisconnected = true;
-    try { session.stitcher.destroy(); } catch (_) {}
-    try { session.ffmpegProcess.stdin.destroy(); } catch (_) {}
-    try { session.ffmpegProcess.kill('SIGKILL'); } catch (_) {}
-    
-    setTimeout(() => {
-      if (fs.existsSync(session.tempDir)) {
-        try {
-          fs.rmSync(session.tempDir, { recursive: true, force: true });
-        } catch (e: any) {
-          this.logger.warn(`Failed to clean directory ${session.tempDir}: ${e.message}`);
-        }
-      }
-    }, 1000);
-  }
-
-  private cleanupExpiredHlsSessions() {
-    const now = Date.now();
-    const expiryThreshold = 30000; // 30 seconds idle
-    for (const [channelId, session] of this.hlsSessions.entries()) {
-      if (now - session.lastActive > expiryThreshold) {
-        this.destroyHlsSession(session);
-        this.hlsSessions.delete(channelId);
-      }
-    }
-  }
-
-  async getHlsPlaylist(channelId: string, userId: string, token: string, res: Response) {
-    const channel = await this.prisma.liveChannel.findFirst({
-      where: { id: channelId, provider: { userId } },
-    });
-    if (!channel || !channel.streamUrl) {
-      throw new NotFoundException('Channel not found');
-    }
-
-    const streamUrl = channel.streamUrl;
-    let session = this.hlsSessions.get(channelId);
-
-    if (!session) {
-      this.logger.log(`Starting dynamic HLS transcode for iOS on channel ${channelId}`);
-      const tempDir = path.join(process.cwd(), 'temp_hls', channelId);
-      fs.mkdirSync(tempDir, { recursive: true });
-
-      const ffmpegPath = process.env.NODE_ENV === 'production' ? 'ffmpeg' : ffmpegStatic;
-      
-      const args = [
-        '-debug_ts',
-        '-fflags', '+genpts+discardcorrupt+igndts',
-        '-i', 'pipe:0',
-        '-c:v', 'copy',
-        '-c:a', 'aac', '-b:a', '128k', '-ac', '2',
-        '-avoid_negative_ts', 'make_zero',
-        '-f', 'hls',
-        '-hls_time', '2',
-        '-hls_list_size', '5',
-        '-hls_flags', 'delete_segments',
-        '-hls_segment_filename', path.join(tempDir, 'seg_%d.ts'),
-        path.join(tempDir, 'playlist.m3u8')
-      ];
-
-      const ffmpegProcess = spawn(ffmpegPath, args) as any;
-      const stitcher = new PassThrough();
-      stitcher.pipe(ffmpegProcess.stdin);
-
-      const activeSession: HlsSession = {
-        channelId,
-        ffmpegProcess,
-        stitcher,
-        lastActive: Date.now(),
-        tempDir,
-        isClientDisconnected: false,
-      };
-
-      session = activeSession;
-      this.hlsSessions.set(channelId, session);
-
-      const streamHeaders = {
-        'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
-        'Accept': '*/*',
-        'Accept-Encoding': 'identity',
-      };
-
-      this.pipeSegmentsInfinitely(channelId, streamUrl, streamHeaders, stitcher, () => activeSession.isClientDisconnected)
-        .catch(e => {
-          this.logger.error(`[HlsStitcher] Loop crashed: ${e.message}`);
-          this.destroyHlsSession(activeSession);
-          this.hlsSessions.delete(channelId);
-        });
-
-      ffmpegProcess.stderr.on('data', (data: any) => {
-        const str = data.toString().trim();
-        if (str.toLowerCase().includes('warning') || str.toLowerCase().includes('error')) {
-          this.logger.warn(`FFmpeg HLS Stderr: ${str}`);
-        }
-      });
-
-      ffmpegProcess.on('close', (code: any) => {
-        this.logger.log(`FFmpeg HLS exited with code ${code}`);
-        this.destroyHlsSession(activeSession);
-        this.hlsSessions.delete(channelId);
-      });
-    }
-
-    session.lastActive = Date.now();
-
-    const playlistPath = path.join(session.tempDir, 'playlist.m3u8');
-    let attempts = 0;
-    while (!fs.existsSync(playlistPath) && attempts < 100) {
-      await new Promise(r => setTimeout(r, 100));
-      attempts++;
-    }
-
-    if (!fs.existsSync(playlistPath)) {
-      this.logger.error(`HLS playlist generation timed out for channel ${channelId}`);
-      if (!res.headersSent) res.status(504).send('Transcoding Timeout');
-      return;
-    }
-
-    try {
-      let content = fs.readFileSync(playlistPath, 'utf8');
-      content = content.replace(/(seg_\d+\.ts)/g, `$1?token=${token}`);
-
-      res.set({
-        'Content-Type': 'application/x-mpegURL',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-        'Access-Control-Allow-Origin': '*',
-      });
-      res.send(content);
-    } catch (e: any) {
-      this.logger.error(`Error reading HLS playlist: ${e.message}`);
-      if (!res.headersSent) res.status(500).send('Internal Server Error');
-    }
-  }
-
-  async getHlsSegment(channelId: string, segmentName: string, res: Response) {
-    const session = this.hlsSessions.get(channelId);
-    if (!session) {
-      if (!res.headersSent) res.status(404).send('Session not found');
-      return;
-    }
-
-    session.lastActive = Date.now();
-
-    const segmentPath = path.join(session.tempDir, segmentName);
-    if (!fs.existsSync(segmentPath)) {
-      if (!res.headersSent) res.status(404).send('Segment not found');
-      return;
-    }
-
-    res.set({
-      'Content-Type': 'video/mp2t',
-      'Cache-Control': 'max-age=3600',
-      'Access-Control-Allow-Origin': '*',
-    });
-
-    const stream = fs.createReadStream(segmentPath);
-    stream.pipe(res);
   }
 }

@@ -19,7 +19,7 @@ export class StreamController {
   ) {
     const trackNum = audioTrack !== undefined && audioTrack !== '' ? parseInt(audioTrack, 10) : undefined;
     const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
-    return this.streamService.proxyLiveStream(channelId, trackNum, targetUserId, res, transcode);
+    return this.streamService.proxyLiveStream(channelId, trackNum, targetUserId, res, transcode, req);
   }
 
   @Get('live/:channelId/playlist.m3u8')
