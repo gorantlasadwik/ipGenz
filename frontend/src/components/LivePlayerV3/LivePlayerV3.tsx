@@ -420,11 +420,20 @@ export function LivePlayerV3({
   // 4. Reconnect with exponential backoff and viewerId tracking
   const handleReconnect = (reason: string) => {
     destroyPipeline()
-    updateState('reconnecting')
 
     setReconnectAttempts((prev) => {
       const nextAttempt = prev + 1
-      const delay = Math.min(1000 * Math.pow(2, prev), 10000)
+
+      // Cap reconnection attempts — prevent infinite loops when backend is down
+      if (nextAttempt > 10) {
+        console.error(`[LivePlayerV3] Max reconnect attempts reached. Reason: ${reason}`)
+        updateState('error')
+        setErrorMsg('Stream unavailable. The server may be offline or the channel URL is invalid. Please try again later.')
+        return nextAttempt
+      }
+
+      updateState('reconnecting')
+      const delay = Math.min(1000 * Math.pow(2, prev), 15000)
       console.log(`[LivePlayerV3] Reconnecting in ${delay}ms (Attempt ${nextAttempt}). Reason: ${reason}`)
 
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current)

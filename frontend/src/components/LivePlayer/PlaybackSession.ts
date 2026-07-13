@@ -13,6 +13,8 @@ export class PlaybackSession {
   private destroyed = false
   private playStarted = false
   private transcodeTriggered = false
+  private mseErrorCount = 0
+  private static readonly MAX_MSE_ERRORS = 5
   readonly id: string
 
   /** The stream URL currently being played. */
@@ -112,6 +114,15 @@ export class PlaybackSession {
     player.on(this.mpegtsLib.Events.ERROR, (type: string, detail: string, info: any) => {
       if (this.destroyed) return
       console.warn(`[PlaybackSession:${this.id}] mpegts.js error:`, type, detail)
+
+      this.mseErrorCount++
+
+      // Hard cap: if we've hit too many errors, stop looping and surface the error
+      if (this.mseErrorCount >= PlaybackSession.MAX_MSE_ERRORS) {
+        console.error(`[PlaybackSession:${this.id}] Max MSE error retries (${PlaybackSession.MAX_MSE_ERRORS}) reached. Giving up.`)
+        this.events.emit('PLAYER_ERROR', { type, detail, info })
+        return
+      }
 
       const isMseCodecError = type === 'MediaError' && detail === 'MediaMSEError'
       if (isMseCodecError && !this.transcodeTriggered) {

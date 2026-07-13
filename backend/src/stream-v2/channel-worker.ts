@@ -173,13 +173,13 @@ export class ChannelWorker {
    */
   decrementSubscribers(onIdleDestroy: () => void): void {
     if (this.ringBuffer.subscriberCount === 0) {
-      this.logger.log(`[Worker:${this.channelId}] 0 active viewers left. Scheduling shutdown in 60s.`);
+      this.logger.log(`[Worker:${this.channelId}] 0 active viewers left. Scheduling shutdown in 10s.`);
       if (this.idleTimeout) clearTimeout(this.idleTimeout);
       this.idleTimeout = setTimeout(() => {
         this.logger.log(`[Worker:${this.channelId}] Idle timeout reached. Destroying worker.`);
         this.destroy();
         onIdleDestroy();
-      }, 60000); // 60s idle timeout
+      }, 10000); // 10s idle timeout — conserve compute quota
     }
   }
 
