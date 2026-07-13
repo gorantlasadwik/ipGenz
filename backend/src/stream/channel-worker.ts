@@ -136,6 +136,9 @@ export class ChannelWorker {
   private spawnFfmpeg(): void {
     if (this.destroyed) return;
 
+    // Clear ring buffer on new FFmpeg spawn to prevent timestamp mixing/discontinuity
+    this.ring.clear();
+
     const ffmpegPath = process.env.NODE_ENV === 'production' ? 'ffmpeg' : ffmpegStatic;
     const transcodeAudio = this.opts.transcodeAudio ?? false;
     const audioTrackIndex = this.opts.audioTrackIndex;

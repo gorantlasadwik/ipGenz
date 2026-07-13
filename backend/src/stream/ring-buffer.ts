@@ -1,50 +1,44 @@
 /**
  * RingBuffer — Circular in-memory buffer for live channel output.
  *
- * HOW YOUTUBE/HOTSTAR/TWITCH WORK (and how we replicate it):
+ * HOW YOUTUBE/HOTSTAR/TWITCH WORK (adapted for IPTV):
  *
- *   CDN platforms store video segments on edge servers. When you open a
- *   channel, you download 10-30 seconds of pre-encoded segments at full
- *   network speed (e.g., 50 Mbps download for 8 Mbps video = 6x faster).
- *   This fills the browser buffer in ~2 seconds, then playback starts.
- *   Live data continues at 1x speed, maintaining the buffer.
+ *   CDN platforms pre-cache segments. When you open a channel, you download
+ *   the last few segments at full network speed (burst), building 6-10 seconds
+ *   of buffer quickly. Playback then runs at 1x, download continues at 1x.
  *
- *   For IPTV, the provider keeps a rolling cache of the last 20-30 seconds.
- *   When our worker connects, the provider sends that cache at full network
- *   speed. We store it in this ring buffer.
+ *   For IPTV, the provider sends a real-time burst of ~20-30s when you first
+ *   connect. Our ring buffer stores this. When a browser subscriber joins,
+ *   we send only the MOST RECENT 6MB (last ~6s at 8Mbps) as a burst fill.
+ *   This builds the browser buffer quickly WITHOUT overflowing the MSE buffer.
  *
- *   CRITICAL: When a new browser subscribes, we FIRST send it ALL the
- *   cached data from the ring buffer (the provider's historical cache burst)
- *   at full network speed. This fills the browser buffer in 1-2 seconds.
- *   Then we continue feeding live data at 1x speed.
+ * WHY WE LIMIT THE BURST TO 6MB (NOT ALL 16MB):
+ *   - Chrome's MSE SourceBuffer has a ~12MB hard limit per stream
+ *   - Sending 16MB causes Chrome to immediately evict old segments → "going back" jitter
+ *   - 6MB = ~6s at 8Mbps: enough to fill browser buffer, not enough to overflow MSE
  *
- *   Result: Browser starts with 8-15 seconds of buffer. Playback is smooth.
- *   Provider reconnects are absorbed by the buffer — browser never knows.
- *
- * Capacity: 16MB default (~16s at 8Mbps, ~8s at 16Mbps).
+ * WHY WE HAVE A clear() METHOD:
+ *   When FFmpeg respawns, it resets timestamps to 0. Old cached data has
+ *   timestamps 0→16s. New data would also start at 0→Xs. This creates a
+ *   timestamp discontinuity in the ring buffer. Calling clear() before
+ *   the new FFmpeg instance produces output prevents serving discontinuous data.
  */
 
 import { PassThrough } from 'stream';
 import { Logger } from '@nestjs/common';
 
+/** How many bytes to burst-fill to new subscribers. ~6s at 8Mbps. */
+const BURST_FILL_BYTES = 6 * 1024 * 1024;
+
 export class RingBuffer {
   private readonly logger = new Logger('RingBuffer');
 
-  /** The underlying circular buffer. */
   private readonly buf: Buffer;
-
-  /** Current write position (next byte goes here). */
   private writePos = 0;
-
-  /** Total bytes ever written. Used to know if buffer has wrapped. */
   private totalWritten = 0;
-
-  /** Active subscribers — only receive live data going forward. */
   private readonly subscribers = new Set<PassThrough>();
-
   private destroyed = false;
 
-  /** capacityBytes: total ring size. Default 16MB. */
   constructor(private readonly capacityBytes = 16 * 1024 * 1024) {
     this.buf = Buffer.alloc(capacityBytes);
   }
@@ -56,7 +50,6 @@ export class RingBuffer {
     if (this.destroyed) return;
     if (chunk.length === 0) return;
 
-    // Write into ring (wrapping around if needed)
     let remaining = chunk.length;
     let srcOffset = 0;
     while (remaining > 0) {
@@ -69,7 +62,6 @@ export class RingBuffer {
     }
     this.totalWritten += chunk.length;
 
-    // Fan-out to all live subscribers
     for (const sub of this.subscribers) {
       if (!sub.destroyed && sub.writable) {
         try {
@@ -84,32 +76,34 @@ export class RingBuffer {
   }
 
   /**
+   * Reset the ring buffer. Called when FFmpeg respawns to prevent serving
+   * data with timestamp discontinuities (old timestamps mixed with new 0-based timestamps).
+   */
+  clear(): void {
+    this.writePos = 0;
+    this.totalWritten = 0;
+    this.logger.log('[RingBuffer] Cleared (FFmpeg respawn — preventing timestamp discontinuity).');
+  }
+
+  /**
    * Subscribe a new browser client.
    *
-   * Strategy: Immediately send all cached ring buffer contents (provider burst)
-   * at full network speed, then continue with live data.
-   *
-   * This gives the browser a head start — it receives 8-15 seconds of video
-   * data much faster than real-time, fills its buffer, then playback begins.
+   * Burst-fills the subscriber with the most recent BURST_FILL_BYTES of cached data
+   * (not the entire ring buffer — that would overflow Chrome's MSE SourceBuffer).
+   * Then adds to live fan-out for all future writes.
    */
   addSubscriber(): PassThrough {
     const pt = new PassThrough({ highWaterMark: 4 * 1024 * 1024 });
 
-    // ── BURST FILL: Replay cached ring buffer contents ─────────────────────
-    // Send all buffered data immediately (at network speed).
-    // This is equivalent to a CDN edge cache dump — the browser gets
-    // 8-15 seconds of pre-buffered video in 1-2 seconds of real time.
-    const cached = this.readAll();
+    // Burst fill: most recent BURST_FILL_BYTES only
+    const cached = this.readLast(BURST_FILL_BYTES);
     if (cached.length > 0) {
       this.logger.log(
-        `[RingBuffer] New subscriber — replaying ${(cached.length / 1024).toFixed(0)}KB of cached data (burst fill)`
+        `[RingBuffer] New subscriber — burst filling ${(cached.length / 1024).toFixed(0)}KB of recent cache`
       );
-      // Write synchronously — the PassThrough internal buffer accepts it
-      // and the browser will drain it at maximum network speed
       pt.write(cached);
     }
 
-    // Now add to live fan-out for future writes
     this.subscribers.add(pt);
     pt.on('close', () => this.subscribers.delete(pt));
     pt.on('error', () => this.subscribers.delete(pt));
@@ -137,24 +131,39 @@ export class RingBuffer {
   }
 
   /**
-   * Read all currently buffered bytes in order (oldest → newest).
-   * Returns a Buffer containing the full ring buffer contents.
+   * Read the most recent `bytes` bytes from the ring buffer.
+   * Returns data in temporal order (oldest → newest within the requested window).
    *
-   * If less than capacityBytes has been written: returns bytes [0, writePos).
-   * If fully wrapped: returns bytes [writePos, end] + [0, writePos).
+   * This is safer than readAll() because:
+   * - It never exceeds Chrome's MSE SourceBuffer size limit
+   * - It always returns the most RECENT data (closest to live edge)
+   * - Old stale data is naturally excluded
    */
-  private readAll(): Buffer {
-    if (this.totalWritten === 0) return Buffer.alloc(0);
+  private readLast(bytes: number): Buffer {
+    const available = Math.min(this.totalWritten, this.capacityBytes);
+    if (available === 0) return Buffer.alloc(0);
+
+    const toRead = Math.min(bytes, available);
 
     if (this.totalWritten <= this.capacityBytes) {
-      // Buffer hasn't wrapped yet — return everything from 0 to writePos
-      return Buffer.from(this.buf.slice(0, this.writePos));
+      // Buffer hasn't wrapped — data lives at [0, writePos)
+      // Take the last `toRead` bytes from that
+      const start = Math.max(0, this.writePos - toRead);
+      return Buffer.from(this.buf.slice(start, this.writePos));
     } else {
-      // Buffer has wrapped — oldest data starts at writePos
-      // Return: [writePos → end] + [0 → writePos]
-      const part1 = Buffer.from(this.buf.slice(this.writePos));
-      const part2 = Buffer.from(this.buf.slice(0, this.writePos));
-      return Buffer.concat([part1, part2]);
+      // Buffer has wrapped — most recent data ends just before writePos
+      // (writePos is where we write NEXT, so [writePos-1] is the newest byte)
+      if (toRead <= this.writePos) {
+        // All requested data is in the region [writePos-toRead, writePos)
+        return Buffer.from(this.buf.slice(this.writePos - toRead, this.writePos));
+      } else {
+        // Need to wrap around: take from end + beginning
+        const fromEnd = toRead - this.writePos;
+        const startInEnd = this.capacityBytes - fromEnd;
+        const part1 = Buffer.from(this.buf.slice(startInEnd));   // end of ring (older)
+        const part2 = Buffer.from(this.buf.slice(0, this.writePos)); // start of ring (newer)
+        return Buffer.concat([part1, part2]);
+      }
     }
   }
 
