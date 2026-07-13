@@ -41,7 +41,7 @@ export class AppController {
         return;
       }
 
-      const ffmpegPath = 'ffmpeg';
+      const ffmpegPath = process.env.NODE_ENV === 'production' ? 'ffmpeg' : ffmpegStatic;
       res.write(`Spawning FFmpeg from path: ${ffmpegPath}\n`);
 
       const args = [

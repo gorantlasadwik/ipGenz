@@ -2,7 +2,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const originalFetch = typeof window !== 'undefined' ? window.fetch : globalThis.fetch;
 const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-  const res = await originalFetch(input, init);
+  const customInit = { ...init };
+  const headers = new Headers(init?.headers || {});
+  headers.set('Bypass-Tunnel-Reminder', 'true');
+  customInit.headers = headers;
+
+  const res = await originalFetch(input, customInit);
   const urlString = typeof input === 'string' ? input : (input as any).url || '';
   const isAuthRoute = urlString.includes('/auth/login') || urlString.includes('/auth/register') || urlString.includes('/auth/request-trial');
   

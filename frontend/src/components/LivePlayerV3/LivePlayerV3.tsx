@@ -239,6 +239,9 @@ export function LivePlayerV3({
           liveSyncMinLatency: 8.0,
           liveSyncMaxLatency: 15.0,
           liveSyncPlaybackRate: 1.1,
+          headers: {
+            'Bypass-Tunnel-Reminder': 'true',
+          }
         }
       )
 
@@ -333,6 +336,7 @@ export function LivePlayerV3({
       const res = await fetch(mediaUrl, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Bypass-Tunnel-Reminder': 'true',
         },
       })
 

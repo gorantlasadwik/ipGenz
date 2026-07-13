@@ -66,6 +66,9 @@ export class PlaybackSession {
         lazyLoad: false,
         liveBufferLatencyChasing: false,
         liveSync: false,
+        headers: {
+          'Bypass-Tunnel-Reminder': 'true',
+        }
       }
     )
 
