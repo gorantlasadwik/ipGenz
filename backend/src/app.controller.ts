@@ -41,9 +41,8 @@ export class AppController {
         return;
       }
 
-      res.write(`Channel: ${channel.name}\n`);
-      res.write(`IPTV Source URL: ${channel.streamUrl}\n`);
-      res.write(`Spawning FFmpeg from path: ${ffmpegStatic}\n`);
+      const ffmpegPath = 'ffmpeg';
+      res.write(`Spawning FFmpeg from path: ${ffmpegPath}\n`);
 
       const args = [
         '-user_agent', 'VLC/3.0.16 LibVLC/3.0.16',
@@ -62,7 +61,7 @@ export class AppController {
 
       res.write(`Args: ${args.join(' ')}\n\n`);
 
-      const proc = spawn(ffmpegStatic, args);
+      const proc = spawn(ffmpegPath, args);
       let receivedBytes = 0;
       let startTime = Date.now();
 
