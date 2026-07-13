@@ -138,7 +138,7 @@ export class StreamV2Service implements OnModuleDestroy {
           }
         });
 
-        transcodeProcess.on('close', (code) => {
+        transcodeProcess.on('close', (code: number | null) => {
           this.logger.log(`[StreamV2Service][Channel:${channelId}] Client remuxer closed with code ${code}`);
           if (!res.writableEnded) res.end();
         });
