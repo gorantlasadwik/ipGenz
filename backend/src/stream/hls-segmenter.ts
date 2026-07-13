@@ -86,7 +86,7 @@ export class HlsSegmenter {
       // HLS packaging parameters
       '-f', 'hls',
       '-hls_time', '2',              // 2-second segments
-      '-hls_list_size', '6',         // rolling window of 6 segments (~12s buffer)
+      '-hls_list_size', '20',         // rolling window of 20 segments (~40s buffer)
       '-hls_flags', 'delete_segments', // auto delete stale segments
       '-hls_segment_filename', path.join(this.tempDir, 'seg_%d.ts'),
       this.playlistPath,

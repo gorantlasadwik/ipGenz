@@ -23,11 +23,11 @@ export class BufferManager {
    * With ring buffer burst fill, browser receives 8-15s of data in 1-2s,
    * so this threshold is hit quickly while ensuring a deep starting buffer.
    */
-  static readonly MIN_START_SEC = 6
+  static readonly MIN_START_SEC = 8
   /** Ideal steady-state buffer (provider cache keeps this filled). */
-  static readonly TARGET_SEC = 10
+  static readonly TARGET_SEC = 12
   /** Maximum buffer (above this, mpegts.js can slow downloads). */
-  static readonly MAX_SEC = 30
+  static readonly MAX_SEC = 40
   /** Below this → show loading spinner. */
   static readonly LOW_SEC = 2
   /** Below this → critical, full recovery needed. */

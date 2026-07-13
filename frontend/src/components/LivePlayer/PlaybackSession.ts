@@ -61,13 +61,14 @@ export class PlaybackSession {
     const hls = new this.HlsLib({
       enableWorker: true,
       lowLatencyMode: false,
-      // Play 3 segments behind live (~6 seconds) for maximum stability
-      liveSyncDurationCount: 3,
-      // Smoothly catch up to the live edge if network lags slightly
-      maxLiveSyncPlaybackRate: 1.1,
-      // Discontinuities are handled natively by stitching segments
-      manifestLoadingMaxRetry: 10,
+      // Play 6 segments behind live for maximum buffer depth and connection drop recovery
+      liveSyncDurationCount: 6,
+      // Do not speed up playback to catch live edge (prevents eating into our own buffer)
+      maxLiveSyncPlaybackRate: 1.0,
+      manifestLoadingMaxRetry: 20,
       manifestLoadingRetryDelay: 1000,
+      fragLoadingMaxRetry: 10,
+      fragLoadingRetryDelay: 1000,
     })
 
     this.hlsPlayer = hls
