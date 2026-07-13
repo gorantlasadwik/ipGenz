@@ -60,15 +60,10 @@ export class PlaybackSession {
       {
         enableWorker: true,
         enableStashBuffer: true,
-        stashInitialSize: 512 * 1024,
+        stashInitialSize: 1024 * 1024,
         lazyLoad: false,
-        liveBufferLatencyChasing: true,
-        liveBufferLatencyMaxLatency: 6,
-        liveBufferLatencyMinRemain: 2,
-        liveSync: true,
-        liveSyncTargetLatency: 4,
-        liveSyncMaxLatency: 8,
-        liveBufferLatencyChasingStartBoundary: 6,
+        liveBufferLatencyChasing: false,
+        liveSync: false,
       }
     )
 
