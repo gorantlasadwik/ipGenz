@@ -22,6 +22,7 @@ class TranscodeCacheStream extends Readable {
   private totalBytes = 0;
   private maxCacheBytes = 10 * 1024 * 1024; // 10MB cache (approx 20 seconds of video)
   private isDestroyed = false;
+  private isPushing = false;
 
   constructor() {
     super({ highWaterMark: 1024 * 1024 * 5 });
@@ -38,10 +39,13 @@ class TranscodeCacheStream extends Readable {
         this.totalBytes -= oldest.length;
       }
     }
-    this.emit('readable');
+    this.flush();
   }
 
-  _read(size: number) {
+  private flush() {
+    if (this.isDestroyed || this.isPushing) return;
+    this.isPushing = true;
+
     while (this.queue.length > 0) {
       const chunk = this.queue[0];
       if (this.push(chunk)) {
@@ -51,6 +55,12 @@ class TranscodeCacheStream extends Readable {
         break;
       }
     }
+
+    this.isPushing = false;
+  }
+
+  _read(size: number) {
+    this.flush();
   }
 
   destroy(error?: Error): this {
@@ -666,30 +676,6 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     let activeResponseStream: any = null;
     let dynamicCacheStream: TranscodeCacheStream | null = null;
 
-    const cacheChecker = setInterval(() => {
-      if (isClientDisconnected() || sink.writableEnded || sink.destroyed) {
-        clearInterval(cacheChecker);
-        return;
-      }
-
-      // Check current cache size of the active cache stream
-      const currentBufSize = dynamicCacheStream
-        ? dynamicCacheStream.getBufferedBytes()
-        : (singleCacheStream ? singleCacheStream.getBufferedBytes() : 0);
-
-      // Forceful caching watchdog: if the cache is low (less than 2MB) and we have an active stream,
-      // we forcefully destroy the active socket to trigger an immediate reconnect.
-      if (currentBufSize < 1024 * 1024 * 2 && activeResponseStream) {
-        this.logger.log(
-          `[CACHE_CHECKER][Channel:${channelId}] Cache size is low (${(currentBufSize / 1024).toFixed(1)} KB). ` +
-          `Forcefully checking stream and triggering immediate reconnect...`
-        );
-        try {
-          activeResponseStream.destroy();
-        } catch (_) {}
-      }
-    }, 1000);
-
     while (!isClientDisconnected() && !sink.writableEnded && !sink.destroyed) {
       if (singleFfmpegProcess && singleFfmpegProcess.killed) {
         this.logger.warn(`[StitcherLoop][Channel:${channelId}] Single FFmpeg process died, stopping loop.`);
@@ -904,7 +890,6 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     if (singleCacheStream) {
       try { singleCacheStream.destroy(); } catch (_) {}
     }
-    clearInterval(cacheChecker);
 
     if (!sink.writableEnded && !sink.destroyed) sink.end();
     this.logger.log(`[STITCHER_STOP][Channel:${channelId}] Loop stopped. Bytes: ${totalBytesWritten}`);

@@ -68,7 +68,7 @@ export class PlaybackSession {
         enableWorker: true,
         enableStashBuffer: true,
         // Larger stash → fills buffer faster on first load
-        stashInitialSize: 1024,
+        stashInitialSize: 1024 * 1024,
         // Disable download throttling to allow accumulating a deep buffer
         lazyLoad: false,
         // Never chase the live edge — buffer stability matters more
