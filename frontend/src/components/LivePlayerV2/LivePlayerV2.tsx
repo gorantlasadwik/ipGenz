@@ -30,6 +30,11 @@ export function LivePlayerV2({
   const hideControlsTimer = useRef<any>(null)
   const reconnectTimer = useRef<any>(null)
   const statsTimer = useRef<any>(null)
+  const viewerIdRef = useRef<string | null>(null)
+
+  if (typeof window !== 'undefined' && !viewerIdRef.current) {
+    viewerIdRef.current = 'v2-' + Math.random().toString(36).substring(2, 15)
+  }
 
   // Player States
   const [mpegtsLib, setMpegtsLib] = useState<any>(null)
@@ -119,7 +124,8 @@ export function LivePlayerV2({
     const mediaUrl = api.streamLiveUrlV2(
       channelId,
       selectedTrackPid || undefined,
-      isTranscoding ? 'audio' : undefined
+      isTranscoding ? 'audio' : undefined,
+      viewerIdRef.current || undefined
     )
 
     console.log(`[LivePlayerV2] Initializing mpegts.js player. Source URL: ${mediaUrl}`)

@@ -505,10 +505,16 @@ export const api = {
 
   // ─── STREAM URLS & INFO ──────────────────────────────────────────────────
   streamLiveUrl: (channelId: string) => `${API_BASE}/stream/live/${channelId}?token=${getToken()}`,
-  streamLiveUrlV2: (channelId: string, audioTrack?: string, transcode?: string) => {
+  streamLiveUrlV2: (channelId: string, audioTrack?: string, transcode?: string, viewerId?: string) => {
     let url = `${API_BASE}/stream-v2/live/${channelId}?token=${getToken()}`;
     if (audioTrack !== undefined && audioTrack !== '') url += `&audioTrack=${audioTrack}`;
     if (transcode !== undefined && transcode !== '') url += `&transcode=${transcode}`;
+    if (viewerId) url += `&viewerId=${viewerId}`;
+    return url;
+  },
+  streamLiveUrlV3: (channelId: string, viewerId?: string) => {
+    let url = `${API_BASE}/stream-v3/live/${channelId}?token=${getToken()}`;
+    if (viewerId) url += `&viewerId=${viewerId}`;
     return url;
   },
   streamMovieUrl: (movieId: string, audioTrack?: string, start?: number) => {
@@ -532,6 +538,12 @@ export const api = {
 
   async getLiveStreamInfoV2(channelId: string) {
     const res = await fetch(`${API_BASE}/stream-v2/live/${channelId}/info`, { headers: authHeaders() });
+    if (!res.ok) return { allAudioStreams: [] };
+    return res.json();
+  },
+
+  async getLiveStreamInfoV3(channelId: string) {
+    const res = await fetch(`${API_BASE}/stream-v3/live/${channelId}/info`, { headers: authHeaders() });
     if (!res.ok) return { allAudioStreams: [] };
     return res.json();
   },

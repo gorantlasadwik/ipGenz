@@ -1,25 +1,23 @@
 import { Controller, Get, Param, Query, Res, UseGuards, Request } from '@nestjs/common';
-import { StreamV2Service } from './stream-v2.service';
+import { StreamV3Service } from './stream-v3.service';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UsersService } from '../users/users.service';
 
-@Controller('stream-v2')
+@Controller('stream-v3')
 @UseGuards(JwtAuthGuard)
-export class StreamV2Controller {
-  constructor(private readonly streamV2Service: StreamV2Service) {}
+export class StreamV3Controller {
+  constructor(private readonly streamV3Service: StreamV3Service) {}
 
   @Get('live/:channelId')
   async streamLiveChannel(
     @Request() req: any,
     @Param('channelId') channelId: string,
     @Res() res: Response,
-    @Query('audioTrack') audioTrack?: string,
-    @Query('transcode') transcode?: string,
     @Query('viewerId') viewerId?: string,
   ) {
     const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
-    return this.streamV2Service.attachViewer(channelId, targetUserId, res, req, { audioTrack, transcode, viewerId });
+    return this.streamV3Service.attachViewer(channelId, targetUserId, res, req, { viewerId });
   }
 
   @Get('live/:channelId/info')
@@ -28,6 +26,6 @@ export class StreamV2Controller {
     @Param('channelId') channelId: string,
   ) {
     const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
-    return this.streamV2Service.getLiveStreamInfo(channelId, targetUserId);
+    return this.streamV3Service.getLiveStreamInfo(channelId, targetUserId);
   }
 }

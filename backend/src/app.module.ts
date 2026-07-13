@@ -11,6 +11,7 @@ import { ObservabilityModule } from './observability/observability.module';
 import { SyncModule } from './sync/sync.module';
 import { StreamModule } from './stream/stream.module';
 import { StreamV2Module } from './stream-v2/stream-v2.module';
+import { StreamV3Module } from './stream-v3/stream-v3.module';
 import { MetadataModule } from './metadata/metadata.module';
 import { ContentModule } from './content/content.module';
 import { LibraryModule } from './library/library.module';
@@ -29,6 +30,7 @@ import { PaymentsModule } from './payments/payments.module';
     SyncModule,
     StreamModule,
     StreamV2Module,
+    StreamV3Module,
     MetadataModule,
     ContentModule,
     LibraryModule,

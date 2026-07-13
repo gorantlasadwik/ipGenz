@@ -10,6 +10,7 @@ const ffmpegStatic = require('ffmpeg-static');
 export class StreamV2Service implements OnModuleDestroy {
   private readonly logger = new Logger(StreamV2Service.name);
   private readonly workers = new Map<string, ChannelWorker>();
+  private readonly viewerOffsets = new Map<string, { lastSequence: number; expiresAt: number }>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -19,6 +20,7 @@ export class StreamV2Service implements OnModuleDestroy {
       worker.destroy();
     }
     this.workers.clear();
+    this.viewerOffsets.clear();
   }
 
   /**
@@ -45,7 +47,7 @@ export class StreamV2Service implements OnModuleDestroy {
     userId: string,
     res: Response,
     req: any,
-    options: { audioTrack?: string; transcode?: string },
+    options: { audioTrack?: string; transcode?: string; viewerId?: string },
   ) {
     const channel = await this.prisma.liveChannel.findFirst({
       where: { id: channelId, provider: { userId } },
@@ -57,6 +59,28 @@ export class StreamV2Service implements OnModuleDestroy {
 
     const worker = await this.getOrCreateWorker(channelId, channel.streamUrl);
     worker.incrementSubscribers();
+
+    // Clean up expired viewer offsets
+    const now = Date.now();
+    for (const [key, val] of this.viewerOffsets.entries()) {
+      if (val.expiresAt < now) {
+        this.viewerOffsets.delete(key);
+      }
+    }
+
+    // Determine start offset based on viewerId cache
+    let startFrom: number | { fromSequence: number } = 20000; // default 20s backfill
+    const viewerKey = `${channelId}:${options.viewerId}`;
+    if (options.viewerId) {
+      const saved = this.viewerOffsets.get(viewerKey);
+      if (saved && saved.expiresAt >= now) {
+        this.logger.log(`[StreamV2Service][Channel:${channelId}] Resuming viewer ${options.viewerId} from sequence ${saved.lastSequence}`);
+        startFrom = { fromSequence: saved.lastSequence };
+      } else {
+        this.logger.log(`[StreamV2Service][Channel:${channelId}] New/Expired connection for viewer ${options.viewerId}. Attaching with 3s backfill.`);
+        startFrom = 3000; // 3 seconds backfill to populate codec info without looping
+      }
+    }
 
     res.setHeader('Content-Type', 'video/mp2t');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -144,11 +168,17 @@ export class StreamV2Service implements OnModuleDestroy {
         });
 
         // Pipe from RingBuffer into the FFmpeg stdin
-        unsubscribe = worker.ringBuffer.subscribe((chunk) => {
+        unsubscribe = worker.ringBuffer.subscribe((chunk, seq) => {
           if (transcodeProcess.stdin && transcodeProcess.stdin.writable) {
+            if (options.viewerId) {
+              this.viewerOffsets.set(viewerKey, {
+                lastSequence: seq,
+                expiresAt: Date.now() + 15000,
+              });
+            }
             transcodeProcess.stdin.write(chunk);
           }
-        }, 20000);
+        }, startFrom);
 
       } catch (err: any) {
         this.logger.error(`[StreamV2Service][Channel:${channelId}] Failed to spawn client remuxer: ${err.message}`);
@@ -158,11 +188,17 @@ export class StreamV2Service implements OnModuleDestroy {
       // Direct stream with 0% CPU overhead
       this.logger.log(`[StreamV2Service][Channel:${channelId}] Piping RingBuffer directly to client (0% CPU)`);
       
-      unsubscribe = worker.ringBuffer.subscribe((chunk) => {
+      unsubscribe = worker.ringBuffer.subscribe((chunk, seq) => {
         if (!res.writableEnded && !res.destroyed) {
+          if (options.viewerId) {
+            this.viewerOffsets.set(viewerKey, {
+              lastSequence: seq,
+              expiresAt: Date.now() + 15000,
+            });
+          }
           res.write(chunk);
         }
-      }, 20000); // 20s backfill
+      }, startFrom);
     }
   }
 
