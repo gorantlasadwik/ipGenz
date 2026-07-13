@@ -8,13 +8,13 @@ const ffmpegStatic = require('ffmpeg-static');
 export class HlsSegmenter {
   private readonly logger = new Logger(HlsSegmenter.name);
   private ffmpegProcess: ChildProcess | null = null;
-  private ffmpegStdin: any = null;
   private destroyed = false;
   readonly playlistPath: string;
 
   constructor(
     private readonly channelId: string,
     private readonly tempDir: string,
+    private readonly streamUrl: string,
   ) {
     this.playlistPath = path.join(this.tempDir, 'playlist.m3u8');
   }
@@ -29,15 +29,42 @@ export class HlsSegmenter {
     if (fs.existsSync(this.tempDir)) {
       try {
         fs.rmSync(this.tempDir, { recursive: true, force: true });
-      } catch (_) {}
+      } catch (e: any) {
+        this.logger.warn(`[HlsSegmenter:${this.channelId}] Directory clean warning: ${e.message}`);
+      }
     }
-    fs.mkdirSync(this.tempDir, { recursive: true });
+    try {
+      fs.mkdirSync(this.tempDir, { recursive: true });
+    } catch (e: any) {
+      this.logger.error(`[HlsSegmenter:${this.channelId}] Failed to create directory: ${e.message}`);
+    }
 
     const ffmpegPath = process.env.NODE_ENV === 'production' ? 'ffmpeg' : ffmpegStatic;
 
+    const isHlsInput = this.streamUrl.toLowerCase().includes('m3u8');
+    const inputArgs: string[] = [];
+
+    if (!isHlsInput) {
+      // Reconnect options for continuous TS streams
+      inputArgs.push(
+        '-reconnect', '1',
+        '-reconnect_at_eof', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '5'
+      );
+    } else {
+      // Reconnect options for HLS segment downloads
+      inputArgs.push(
+        '-reconnect', '1',
+        '-reconnect_delay_max', '5'
+      );
+    }
+
     const args: string[] = [
+      ...inputArgs,
       '-fflags', '+genpts+discardcorrupt+igndts',
-      '-i', 'pipe:0',
+      '-user_agent', 'VLC/3.0.16',
+      '-i', this.streamUrl,
 
       // Map all video and audio streams
       '-map', '0:v?',
@@ -65,14 +92,13 @@ export class HlsSegmenter {
       this.playlistPath,
     ];
 
-    this.logger.log(`[HlsSegmenter:${this.channelId}] Spawning FFmpeg: ffmpeg ${args.join(' ')}`);
+    this.logger.log(`[HlsSegmenter:${this.channelId}] Spawning FFmpeg direct ingest: ffmpeg ${args.join(' ')}`);
 
     const proc = spawn(ffmpegPath, args, {
-      stdio: ['pipe', 'ignore', 'pipe'], // ignore stdout (output goes directly to files), pipe stdin & stderr
+      stdio: ['ignore', 'ignore', 'pipe'], // ignore stdin/stdout, pipe stderr for diagnostics
     });
 
     this.ffmpegProcess = proc;
-    this.ffmpegStdin = proc.stdin;
 
     proc.stderr?.on('data', (data: Buffer) => {
       const msg = data.toString().trim();
@@ -89,40 +115,27 @@ export class HlsSegmenter {
     proc.on('close', (code: number) => {
       this.logger.log(`[HlsSegmenter:${this.channelId}] process exited with code ${code}`);
       this.ffmpegProcess = null;
-      this.ffmpegStdin = null;
 
       if (!this.destroyed) {
-        this.logger.warn(`[HlsSegmenter:${this.channelId}] process closed unexpectedly — respawning in 500ms`);
+        this.logger.warn(`[HlsSegmenter:${this.channelId}] process closed unexpectedly — respawning in 1000ms`);
         setTimeout(() => {
           if (!this.destroyed) this.start();
-        }, 500);
+        }, 1000);
       }
     });
   }
 
   /**
-   * Write raw incoming TS stream data into FFmpeg stdin.
+   * Stub for backward compatibility.
    */
   write(chunk: Buffer): boolean {
-    if (this.destroyed || !this.ffmpegStdin || this.ffmpegStdin.destroyed) {
-      return false;
-    }
-    try {
-      return this.ffmpegStdin.write(chunk);
-    } catch (e: any) {
-      this.logger.error(`[HlsSegmenter:${this.channelId}] Stdin write error: ${e.message}`);
-      return false;
-    }
+    return true;
   }
 
   /**
-   * Listen to stdin drain events for backpressure.
+   * Stub for backward compatibility.
    */
-  onDrain(callback: () => void): void {
-    if (this.ffmpegStdin) {
-      this.ffmpegStdin.once('drain', callback);
-    }
-  }
+  onDrain(callback: () => void): void {}
 
   /**
    * Cleanly terminate FFmpeg and purge segment files.
@@ -133,10 +146,8 @@ export class HlsSegmenter {
     this.logger.log(`[HlsSegmenter:${this.channelId}] Destroying segmenter and purging directory: ${this.tempDir}`);
 
     if (this.ffmpegProcess) {
-      try { this.ffmpegStdin?.destroy(); } catch (_) {}
       try { this.ffmpegProcess.kill('SIGKILL'); } catch (_) {}
       this.ffmpegProcess = null;
-      this.ffmpegStdin = null;
     }
 
     // Purge HLS temp files from disk

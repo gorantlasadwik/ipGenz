@@ -376,14 +376,11 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
 
     this.logger.log(`[WorkerPool] Creating new Live HLS Worker for channel ${channelId}`);
     const tempDir = path.join(process.cwd(), 'temp_hls', channelId);
-    const worker = new ChannelWorker(
-      {
-        channelId,
-        streamUrl,
-        tempDir,
-      },
-      this.httpService,
-    );
+    const worker = new ChannelWorker({
+      channelId,
+      streamUrl,
+      tempDir,
+    });
     this.channelWorkers.set(channelId, worker);
     await worker.start();
     return worker;

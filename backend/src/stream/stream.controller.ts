@@ -33,6 +33,12 @@ export class StreamController {
     return this.streamService.getHlsPlaylist(channelId, targetUserId, token, res);
   }
 
+  @Get('live/:channelId/info')
+  async getLiveChannelInfo(@Request() req: any, @Param('channelId') channelId: string) {
+    const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
+    return this.streamService.getLiveStreamInfo(channelId, targetUserId);
+  }
+
   @Get('live/:channelId/:segmentName')
   async getHlsSegment(
     @Param('channelId') channelId: string,
@@ -40,12 +46,6 @@ export class StreamController {
     @Res() res: Response,
   ) {
     return this.streamService.getHlsSegment(channelId, segmentName, res);
-  }
-
-  @Get('live/:channelId/info')
-  async getLiveChannelInfo(@Request() req: any, @Param('channelId') channelId: string) {
-    const targetUserId = req.user.isPremiumTrial ? (UsersService.trialMasterUserId || req.user.userId) : req.user.userId;
-    return this.streamService.getLiveStreamInfo(channelId, targetUserId);
   }
 
   @Get('movie/:movieId')
