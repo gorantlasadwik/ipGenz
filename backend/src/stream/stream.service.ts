@@ -366,13 +366,16 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.logger.log(`[WorkerPool] Creating new worker for channel ${channelId}`);
-    const worker = new ChannelWorker({
-      channelId,
-      streamUrl,
-      audioTrackIndex,
-      transcodeAudio,
-      ringCapacityBytes: 10 * 1024 * 1024, // 10MB
-    });
+    const worker = new ChannelWorker(
+      {
+        channelId,
+        streamUrl,
+        audioTrackIndex,
+        transcodeAudio,
+        ringCapacityBytes: 10 * 1024 * 1024, // 10MB
+      },
+      this.httpService, // Axios — handles redirects, CDN hops, auth
+    );
     this.channelWorkers.set(channelId, worker);
     await worker.start();
     return worker;

@@ -4,7 +4,7 @@
  * Architecture:
  *   Provider HTTP → Connection Loop → FFmpeg stdin
  *                                         ↓
- *                                   FFmpeg (normalizes timestamps)
+ *                                   FFmpeg (-fflags +genpts, -c copy)
  *                                         ↓
  *                                   RingBuffer (10MB circular)
  *                                         ↓
@@ -12,36 +12,33 @@
  *
  * Key design decisions:
  *   - FFmpeg is NEVER restarted between provider reconnects.
- *     We keep one long-lived FFmpeg process per channel.
- *     Provider data continuously feeds FFmpeg stdin.
- *     -fflags +genpts forces continuous timestamp regeneration
- *     regardless of what the provider sends — fixing all discontinuities.
+ *     One long-lived FFmpeg per channel.
+ *     -fflags +genpts forces continuous timestamp regeneration across reconnects.
  *
- *   - The provider connection loop reconnects instantly on EOF.
- *     The browser never sees this reconnect.
+ *   - Uses Axios (httpService) for HTTP requests — correctly follows redirects,
+ *     handles CDN hops, and manages auth that raw http.get misses.
  *
- *   - Audio is handled per-PID. Only the selected audio track is
- *     mapped and transcoded (if needed). Video is always -c:v copy.
+ *   - Default mode: -c copy (no re-encode). If audio transcode needed: -c:a aac.
+ *
+ *   - Connection loop reconnects instantly on provider EOF.
+ *     Browser never sees this reconnect.
  */
 
 import { Logger } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 import { spawn } from 'child_process';
 import { PassThrough } from 'stream';
-import * as http from 'http';
-import * as https from 'https';
 import { RingBuffer } from './ring-buffer';
 
 const ffmpegStatic = require('ffmpeg-static');
 
-const keepAliveHttpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 1000, maxSockets: 5 });
-const keepAliveHttpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 1000, maxSockets: 5 });
-
 export interface WorkerOptions {
   channelId: string;
   streamUrl: string;
-  /** Selected audio track index (0-based). Default: 0 */
+  /** Selected audio track index (0-based). Default: not mapped (let FFmpeg auto-select). */
   audioTrackIndex?: number;
-  /** Force audio transcode (e.g. AC3 → AAC). Default: auto-detect */
+  /** Force audio transcode (e.g. AC3 → AAC). Default: false (copy). */
   transcodeAudio?: boolean;
   /** Ring buffer capacity in bytes. Default: 10MB */
   ringCapacityBytes?: number;
@@ -58,12 +55,15 @@ export class ChannelWorker {
   private lastBytesIn = 0;
   private totalBytesIn = 0;
   private running = false;
-  private currentProviderStream: http.IncomingMessage | null = null;
+  private currentProviderStream: any = null;
   private statsInterval: NodeJS.Timeout | null = null;
 
   readonly channelId: string;
 
-  constructor(private readonly opts: WorkerOptions) {
+  constructor(
+    private readonly opts: WorkerOptions,
+    private readonly httpService: HttpService,
+  ) {
     this.channelId = opts.channelId;
     this.ring = new RingBuffer(opts.ringCapacityBytes ?? 10 * 1024 * 1024);
   }
@@ -127,46 +127,55 @@ export class ChannelWorker {
   /**
    * Spawn a single long-lived FFmpeg process for the lifetime of this worker.
    * FFmpeg reads raw TS from stdin and writes normalized TS to stdout.
+   *
+   * Critical: We keep this process alive across ALL provider reconnects.
+   * -fflags +genpts regenerates timestamps from scratch, absorbing all
+   * provider-side PTS/DTS discontinuities. From the browser's view,
+   * timestamps are always monotonically increasing.
    */
   private spawnFfmpeg(): void {
     if (this.destroyed) return;
 
     const ffmpegPath = process.env.NODE_ENV === 'production' ? 'ffmpeg' : ffmpegStatic;
-    const audioTrackIndex = this.opts.audioTrackIndex ?? 0;
-    const transcodeAudio = this.opts.transcodeAudio ?? true; // default: transcode for compatibility
+    const transcodeAudio = this.opts.transcodeAudio ?? false;
+    const audioTrackIndex = this.opts.audioTrackIndex;
 
     const args: string[] = [
-      // Input flags — handle all timestamp weirdness from provider
+      // Input — handle all timestamp weirdness from provider
       '-fflags', '+genpts+discardcorrupt+igndts+nobuffer',
-      '-analyzeduration', '1000000',   // 1s analyze (fast start)
-      '-probesize', '1000000',          // 1MB probe
-      '-i', 'pipe:0',                   // read from stdin
+      '-analyzeduration', '500000',   // 0.5s analyze (fast start)
+      '-probesize', '500000',          // 500KB probe (fast start)
+      '-i', 'pipe:0',                  // read from stdin (continuously fed by connection loop)
+    ];
 
-      // Map only the streams we need
-      '-map', '0:v:0?',                 // first video (optional — some channels audio-only)
-      '-map', `0:a:${audioTrackIndex}?`, // selected audio track only
+    // Stream mapping — only map specific audio track if requested
+    if (audioTrackIndex !== undefined) {
+      args.push('-map', '0:v?', '-map', `0:a:${audioTrackIndex}?`);
+    }
+    // else: no -map → FFmpeg auto-selects best video + audio (safest default)
 
-      // Video — NEVER re-encode
-      '-c:v', 'copy',
+    // Video — NEVER re-encode
+    args.push('-c:v', 'copy');
 
-      // Audio — transcode only if needed
-      ...(transcodeAudio
-        ? ['-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-ar', '48000']
-        : ['-c:a', 'copy']),
+    // Audio — copy unless explicitly transcoding
+    if (transcodeAudio) {
+      args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-ar', '48000');
+    } else {
+      args.push('-c:a', 'copy');
+    }
 
-      // Muxer — keep timestamps continuous and clean
+    // Muxer — continuous, flushed output
+    args.push(
       '-avoid_negative_ts', 'make_zero',
       '-muxdelay', '0',
       '-muxpreload', '0',
       '-max_muxing_queue_size', '4096',
       '-flush_packets', '1',
-
-      // Output
       '-f', 'mpegts',
       'pipe:1',
-    ];
+    );
 
-    this.logger.log(`[Worker:${this.channelId}] Spawning FFmpeg: ffmpeg ${args.join(' ')}`);
+    this.logger.log(`[Worker:${this.channelId}] Spawning FFmpeg with args: ${args.join(' ')}`);
 
     const proc = spawn(ffmpegPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -175,16 +184,21 @@ export class ChannelWorker {
     this.ffmpegProcess = proc;
     this.ffmpegStdin = proc.stdin;
 
-    // FFmpeg stdout → ring buffer (continuous normalized output)
+    // FFmpeg stdout → ring buffer (continuous normalized output to all browsers)
     proc.stdout.on('data', (chunk: Buffer) => {
       if (this.destroyed) return;
       this.ring.write(chunk);
     });
 
+    // Log only significant FFmpeg messages
     proc.stderr.on('data', (data: Buffer) => {
       const msg = data.toString().trim();
-      // Only log warnings and errors to avoid noise
-      if (msg.includes('Error') || msg.includes('error') || msg.includes('warning')) {
+      if (
+        msg.includes('Error') ||
+        msg.includes('error') ||
+        msg.includes('Invalid') ||
+        msg.includes('No such')
+      ) {
         this.logger.warn(`[Worker:${this.channelId}][FFmpeg] ${msg}`);
       }
     });
@@ -200,8 +214,8 @@ export class ChannelWorker {
 
       // If not intentionally destroyed, respawn FFmpeg
       if (!this.destroyed) {
-        this.logger.warn(`[Worker:${this.channelId}] FFmpeg exited unexpectedly — respawning in 500ms`);
-        setTimeout(() => { if (!this.destroyed) this.spawnFfmpeg(); }, 500);
+        this.logger.warn(`[Worker:${this.channelId}] FFmpeg exited unexpectedly — respawning in 300ms`);
+        setTimeout(() => { if (!this.destroyed) this.spawnFfmpeg(); }, 300);
       }
     });
 
@@ -210,18 +224,40 @@ export class ChannelWorker {
 
   /**
    * Async connection loop — continuously fetches provider stream and pipes to FFmpeg stdin.
-   * Provider reconnects are transparent to the browser.
+   * Uses Axios (httpService) so redirects, CDN hops, and auth are handled automatically.
+   * Provider reconnects are completely transparent to the browser.
    */
   private async startConnectionLoop(): Promise<void> {
     while (!this.destroyed) {
       try {
-        this.logger.log(`[Worker:${this.channelId}] Connecting to provider (reconnect #${this.reconnectCount})`);
+        this.logger.log(
+          `[Worker:${this.channelId}] Connecting to provider` +
+          (this.reconnectCount > 0 ? ` (reconnect #${this.reconnectCount})` : '')
+        );
 
-        const stream = await this.fetchProviderStream();
+        // Axios handles redirects, CDN hops, compression headers automatically
+        const response = await firstValueFrom(
+          this.httpService.get(this.opts.streamUrl, {
+            responseType: 'stream',
+            decompress: false,
+            timeout: 10000,
+            headers: {
+              'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
+              'Accept': '*/*',
+              'Accept-Encoding': 'identity',
+              'Connection': 'keep-alive',
+            },
+          })
+        );
+
+        const stream = response.data;
         this.currentProviderStream = stream;
         this.consecutiveErrors = 0;
 
-        this.logger.log(`[Worker:${this.channelId}] Provider connected.`);
+        this.logger.log(
+          `[Worker:${this.channelId}] Provider connected (HTTP ${response.status}). ` +
+          `Feeding FFmpeg stdin.`
+        );
 
         await new Promise<void>((resolve) => {
           // Feed provider stream → FFmpeg stdin
@@ -234,17 +270,25 @@ export class ChannelWorker {
 
             if (this.ffmpegStdin && !this.ffmpegStdin.destroyed) {
               try {
-                if (!this.ffmpegStdin.write(chunk)) {
-                  // Backpressure — wait for drain
+                const ok = this.ffmpegStdin.write(chunk);
+                if (!ok) {
+                  // Backpressure — wait for FFmpeg to consume before reading more
                   stream.pause();
-                  this.ffmpegStdin.once('drain', () => { try { stream.resume(); } catch (_) {} });
+                  this.ffmpegStdin.once('drain', () => {
+                    if (!this.destroyed) {
+                      try { stream.resume(); } catch (_) {}
+                    }
+                  });
                 }
               } catch (_) {}
             }
           });
 
           stream.on('end', () => {
-            this.logger.log(`[Worker:${this.channelId}] Provider EOF. Will reconnect immediately.`);
+            this.logger.log(
+              `[Worker:${this.channelId}] Provider EOF after ${this.totalBytesIn - this.lastBytesIn} bytes. ` +
+              `Reconnecting immediately.`
+            );
             this.reconnectCount++;
             this.currentProviderStream = null;
             resolve();
@@ -262,20 +306,20 @@ export class ChannelWorker {
           });
         });
 
-        // Small yield between reconnects — lets the event loop breathe
+        // Tiny yield between reconnects — lets event loop breathe
         if (!this.destroyed) {
           await new Promise(r => setTimeout(r, 50));
         }
 
       } catch (err: any) {
         this.consecutiveErrors++;
-        const delay = Math.min(100 * Math.pow(2, this.consecutiveErrors - 1), 2000);
+        const delay = Math.min(100 * Math.pow(2, this.consecutiveErrors - 1), 3000);
         this.logger.warn(
           `[Worker:${this.channelId}] Connection error #${this.consecutiveErrors}: ${err.message}. ` +
           `Retrying in ${delay}ms`
         );
         if (this.consecutiveErrors > 20) {
-          this.logger.error(`[Worker:${this.channelId}] Too many errors — giving up.`);
+          this.logger.error(`[Worker:${this.channelId}] Too many consecutive errors — giving up.`);
           this.destroy();
           return;
         }
@@ -284,55 +328,19 @@ export class ChannelWorker {
     }
   }
 
-  /**
-   * Opens an HTTP/HTTPS connection to the provider and returns the response stream.
-   */
-  private async fetchProviderStream(): Promise<http.IncomingMessage> {
-    return new Promise((resolve, reject) => {
-      const url = new URL(this.opts.streamUrl);
-      const isHttps = url.protocol === 'https:';
-      const agent = isHttps ? keepAliveHttpsAgent : keepAliveHttpAgent;
-      const lib = isHttps ? https : http;
-
-      const req = lib.get(
-        this.opts.streamUrl,
-        {
-          agent,
-          headers: {
-            'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16',
-            'Accept': '*/*',
-            'Accept-Encoding': 'identity',
-            'Connection': 'keep-alive',
-          },
-        },
-        (res) => {
-          if (res.statusCode && res.statusCode >= 400) {
-            reject(new Error(`Provider returned HTTP ${res.statusCode}`));
-            res.destroy();
-            return;
-          }
-          resolve(res);
-        }
-      );
-
-      req.on('error', reject);
-      req.setTimeout(8000, () => {
-        req.destroy(new Error('Provider connection timeout'));
-      });
-    });
-  }
-
   private startStatsLogger(): void {
+    let lastTotal = 0;
     this.statsInterval = setInterval(() => {
       if (this.destroyed) return;
-      const delta = this.totalBytesIn - this.lastBytesIn;
-      this.lastBytesIn = this.totalBytesIn;
+      const delta = this.totalBytesIn - lastTotal;
+      lastTotal = this.totalBytesIn;
       const kbps = Math.round((delta * 8) / 1024);
       this.logger.log(
-        `[Worker:${this.channelId}] Reconnects=${this.reconnectCount} ` +
+        `[Worker:${this.channelId}] ` +
+        `Reconnects=${this.reconnectCount} ` +
         `Subscribers=${this.ring.subscriberCount} ` +
         `Bitrate=${kbps}kbps ` +
-        `BufferBytes=${this.ring.getBufferedBytes()}`
+        `RingBytes=${this.ring.getBufferedBytes()}`
       );
     }, 5000);
   }
