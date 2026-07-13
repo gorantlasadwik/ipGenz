@@ -17,17 +17,18 @@ export interface BufferReport {
 }
 
 export class BufferManager {
-  // ── Thresholds ────────────────────────────────────────────────────────────
-  /** Don't start playback until this many seconds are buffered. */
-  static readonly MIN_START_SEC = 5
+  // ── Thresholds ─────────────────────────────────────────────────────────────────────
+  /** Don't start playback until this many seconds are buffered.
+   * 2s is safe because the backend ring buffer always has 8-10s ready. */
+  static readonly MIN_START_SEC = 2
   /** Ideal steady-state buffer. */
-  static readonly TARGET_SEC = 10
+  static readonly TARGET_SEC = 6
   /** Maximum — above this we could slow down (future: rate control). */
   static readonly MAX_SEC = 15
   /** Below this → show a spinner and escalate. */
-  static readonly LOW_SEC = 3
+  static readonly LOW_SEC = 1.5
   /** Below this → critical, full recovery needed. */
-  static readonly CRITICAL_SEC = 0.5
+  static readonly CRITICAL_SEC = 0.3
 
   private videoEl: HTMLVideoElement | null = null
   private intervalId: any = null

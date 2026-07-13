@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as http from 'http';
 import * as https from 'https';
+import { ChannelWorker } from './channel-worker';
 
 const keepAliveHttpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 1000 });
 const keepAliveHttpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 1000 });
@@ -282,6 +283,11 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
   private hlsSessions = new Map<string, HlsSession>();
   private hlsCleanupInterval: any = null;
 
+  // ─── Channel Worker Pool (one worker per active live channel) ──────────────
+  private channelWorkers = new Map<string, ChannelWorker>();
+  /** Pending destroy timers — workers are kept alive for 60s after last subscriber */
+  private workerIdleTimers = new Map<string, NodeJS.Timeout>();
+
   constructor(
     private prisma: PrismaService,
     private httpService: HttpService,
@@ -310,6 +316,16 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
     }
     this.hlsSessions.clear();
 
+    // Destroy all active channel workers
+    for (const [id, timer] of this.workerIdleTimers) {
+      clearTimeout(timer);
+    }
+    this.workerIdleTimers.clear();
+    for (const worker of this.channelWorkers.values()) {
+      worker.destroy();
+    }
+    this.channelWorkers.clear();
+
     const mainHlsDir = path.join(process.cwd(), 'temp_hls');
     if (fs.existsSync(mainHlsDir)) {
       try {
@@ -317,6 +333,72 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       } catch (e: any) {
         this.logger.error(`Failed to delete main HLS dir on destroy: ${e.message}`);
       }
+    }
+  }
+
+  /**
+   * Get an existing ChannelWorker for this channel, or create and start one.
+   * Workers are shared across all browser subscribers watching the same channel.
+   */
+  private async getOrCreateWorker(
+    channelId: string,
+    streamUrl: string,
+    audioTrackIndex: number,
+    transcodeAudio: boolean,
+  ): Promise<ChannelWorker> {
+    // Cancel any pending idle-destroy timer
+    const idleTimer = this.workerIdleTimers.get(channelId);
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      this.workerIdleTimers.delete(channelId);
+    }
+
+    const existing = this.channelWorkers.get(channelId);
+    if (existing && existing.isRunning) {
+      this.logger.log(`[WorkerPool] Reusing existing worker for channel ${channelId}`);
+      return existing;
+    }
+
+    // Destroy stale worker if any
+    if (existing) {
+      existing.destroy();
+      this.channelWorkers.delete(channelId);
+    }
+
+    this.logger.log(`[WorkerPool] Creating new worker for channel ${channelId}`);
+    const worker = new ChannelWorker({
+      channelId,
+      streamUrl,
+      audioTrackIndex,
+      transcodeAudio,
+      ringCapacityBytes: 10 * 1024 * 1024, // 10MB
+    });
+    this.channelWorkers.set(channelId, worker);
+    await worker.start();
+    return worker;
+  }
+
+  /**
+   * Unsubscribe a browser from a worker.
+   * If no subscribers remain, schedule the worker for destruction after 60s.
+   */
+  private releaseWorkerSubscriber(channelId: string, pt: PassThrough): void {
+    const worker = this.channelWorkers.get(channelId);
+    if (!worker) return;
+    worker.unsubscribe(pt);
+
+    if (worker.subscriberCount === 0) {
+      this.logger.log(`[WorkerPool] No subscribers for ${channelId} — scheduling idle destroy in 60s`);
+      const timer = setTimeout(() => {
+        const w = this.channelWorkers.get(channelId);
+        if (w && w.subscriberCount === 0) {
+          this.logger.log(`[WorkerPool] Destroying idle worker for ${channelId}`);
+          w.destroy();
+          this.channelWorkers.delete(channelId);
+        }
+        this.workerIdleTimers.delete(channelId);
+      }, 60_000);
+      this.workerIdleTimers.set(channelId, timer);
     }
   }
 
@@ -958,11 +1040,16 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       return this.handleTranscodeStream(streamUrl, profile.transcodeType as any, res, undefined, undefined, true, channelId, transcode || 'audio');
     }
 
-    // ── DIRECT PROXY: segment stitcher ────────────────────────────────────────
-    // Instead of piping a single 33-second response and letting it close, we
-    // keep the client HTTP response open and continuously fetch the next segment,
-    // writing each one in with end:false.  The browser never sees EOF so
-    // mpegts.js sets duration = Infinity and shows a proper LIVE stream.
+    // ── CONTINUOUS WORKER: Ring Buffer Pipeline ────────────────────────────────
+    // A long-lived ChannelWorker maintains the provider connection and normalizes
+    // timestamps via a single FFmpeg process (-fflags +genpts, -c:v copy).
+    // Provider reconnects are transparent — FFmpeg keeps producing continuous TS.
+    // The browser reads from a ring buffer; it never knows the provider disconnected.
+
+    // Determine audio transcode needs from profile
+    const needsAudioTranscode = profile?.transcodingRequired && profile?.transcodeType === 'AUDIO';
+    const resolvedAudioTrack = audioTrack ?? 0;
+
     res.set({
       'Content-Type': 'video/mp2t',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -971,19 +1058,32 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
       'Access-Control-Allow-Origin': '*',
     });
 
-    const stitcher = new PassThrough();
-    let clientDisconnected = false;
-    res.on('close', () => { clientDisconnected = true; });
-    stitcher.pipe(res);
+    let worker: ChannelWorker;
+    try {
+      worker = await this.getOrCreateWorker(
+        channelId,
+        streamUrl,
+        resolvedAudioTrack,
+        needsAudioTranscode ?? true,
+      );
+    } catch (err: any) {
+      this.logger.error(`[WorkerPool] Failed to start worker for ${channelId}: ${err.message}`);
+      if (!res.headersSent) res.status(502).send('Stream Unavailable');
+      return;
+    }
 
-    this.pipeSegmentsInfinitely(
-      channelId,
-      streamUrl,
-      { 'User-Agent': 'VLC/3.0.16 LibVLC/3.0.16', 'Accept': '*/*', 'Accept-Encoding': 'identity', 'Connection': 'keep-alive' },
-      stitcher,
-      () => clientDisconnected,
-    ).catch(e => {
-      this.logger.error(`[SegmentStitcher] Direct proxy error: ${e.message}`);
+    // Subscribe this browser client to the ring buffer
+    const subscriberPt = worker.subscribe();
+    subscriberPt.pipe(res);
+
+    res.on('close', () => {
+      this.logger.log(`[WorkerPool] Browser disconnected from ${channelId}`);
+      this.releaseWorkerSubscriber(channelId, subscriberPt);
+    });
+
+    subscriberPt.on('error', (err) => {
+      this.logger.warn(`[WorkerPool] Subscriber pipe error for ${channelId}: ${err.message}`);
+      this.releaseWorkerSubscriber(channelId, subscriberPt);
       if (!res.writableEnded) res.end();
     });
   }
