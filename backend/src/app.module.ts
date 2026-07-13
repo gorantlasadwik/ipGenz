@@ -10,6 +10,7 @@ import { PluginsModule } from './plugins/plugins.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { SyncModule } from './sync/sync.module';
 import { StreamModule } from './stream/stream.module';
+import { StreamV2Module } from './stream-v2/stream-v2.module';
 import { MetadataModule } from './metadata/metadata.module';
 import { ContentModule } from './content/content.module';
 import { LibraryModule } from './library/library.module';
@@ -27,6 +28,7 @@ import { PaymentsModule } from './payments/payments.module';
     ObservabilityModule,
     SyncModule,
     StreamModule,
+    StreamV2Module,
     MetadataModule,
     ContentModule,
     LibraryModule,
@@ -37,3 +39,4 @@ import { PaymentsModule } from './payments/payments.module';
   providers: [AppService],
 })
 export class AppModule {}
+
