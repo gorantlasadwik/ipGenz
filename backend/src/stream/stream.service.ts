@@ -372,7 +372,7 @@ export class StreamService implements OnModuleInit, OnModuleDestroy {
         streamUrl,
         audioTrackIndex,
         transcodeAudio,
-        ringCapacityBytes: 10 * 1024 * 1024, // 10MB
+        ringCapacityBytes: 16 * 1024 * 1024, // 16MB — ~16s at 8Mbps, burst-fills browser on connect
       },
       this.httpService, // Axios — handles redirects, CDN hops, auth
     );

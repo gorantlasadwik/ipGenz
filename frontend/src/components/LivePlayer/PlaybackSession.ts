@@ -67,18 +67,20 @@ export class PlaybackSession {
       {
         enableWorker: true,
         enableStashBuffer: true,
-        // 512KB stash — fills fast so playback starts within 1-2s
-        stashInitialSize: 512 * 1024,
-        // Don't throttle downloads — let the backend ring buffer saturate the stash
+        // Large stash — accepts the ring buffer burst dump fast
+        stashInitialSize: 1024 * 1024,
+        // Don't throttle downloads — let the ring buffer burst fill the stash
         lazyLoad: false,
-        // Chase the live edge so we don't drift too far behind
-        liveBufferLatencyChasing: true,
-        liveSync: true,
-        // Target 6 seconds behind live (matches ring buffer depth)
-        liveSyncTargetLatency: 6,
-        // Start chasing if we exceed 12 seconds behind
-        liveSyncMaxLatency: 12,
-        liveBufferLatencyChasingStartBoundary: 12,
+        // CRITICAL: Do NOT chase the live edge.
+        // Our ring buffer always has 8-15 seconds of cache.
+        // Chasing the live edge would aggressively burn through the buffer
+        // causing the waiting → playing → waiting cycle.
+        // Instead, stay 20s behind live where the buffer is deep and stable.
+        liveBufferLatencyChasing: false,
+        liveSync: false,
+        liveSyncTargetLatency: 20,
+        liveSyncMaxLatency: 30,
+        liveBufferLatencyChasingStartBoundary: 30,
       }
     )
 

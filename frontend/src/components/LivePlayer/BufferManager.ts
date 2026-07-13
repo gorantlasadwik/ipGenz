@@ -17,18 +17,21 @@ export interface BufferReport {
 }
 
 export class BufferManager {
-  // ── Thresholds ─────────────────────────────────────────────────────────────────────
-  /** Don't start playback until this many seconds are buffered.
-   * 2s is safe because the backend ring buffer always has 8-10s ready. */
-  static readonly MIN_START_SEC = 2
-  /** Ideal steady-state buffer. */
-  static readonly TARGET_SEC = 6
-  /** Maximum — above this we could slow down (future: rate control). */
-  static readonly MAX_SEC = 15
-  /** Below this → show a spinner and escalate. */
-  static readonly LOW_SEC = 1.5
+  // ── Thresholds (tuned for ring buffer burst-fill strategy) ───────────
+  /**
+   * Wait for 6s before starting playback.
+   * With ring buffer burst fill, browser receives 8-15s of data in 1-2s,
+   * so this threshold is hit quickly while ensuring a deep starting buffer.
+   */
+  static readonly MIN_START_SEC = 6
+  /** Ideal steady-state buffer (provider cache keeps this filled). */
+  static readonly TARGET_SEC = 10
+  /** Maximum buffer (above this, mpegts.js can slow downloads). */
+  static readonly MAX_SEC = 30
+  /** Below this → show loading spinner. */
+  static readonly LOW_SEC = 2
   /** Below this → critical, full recovery needed. */
-  static readonly CRITICAL_SEC = 0.3
+  static readonly CRITICAL_SEC = 0.5
 
   private videoEl: HTMLVideoElement | null = null
   private intervalId: any = null
