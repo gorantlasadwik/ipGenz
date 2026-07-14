@@ -508,20 +508,10 @@ export const api = {
     return res.json();
   },
 
-  // ─── STREAM URLS & INFO ──────────────────────────────────────────────────
-  streamLiveUrl: (channelId: string) => `${API_BASE}/stream/live/${channelId}?token=${getToken()}`,
-  streamLiveUrlV2: (channelId: string, audioTrack?: string, transcode?: string, viewerId?: string) => {
-    let url = `${API_BASE}/stream-v2/live/${channelId}?token=${getToken()}`;
-    if (audioTrack !== undefined && audioTrack !== '') url += `&audioTrack=${audioTrack}`;
-    if (transcode !== undefined && transcode !== '') url += `&transcode=${transcode}`;
-    if (viewerId) url += `&viewerId=${viewerId}`;
-    return url;
-  },
-  streamLiveUrlV3: (channelId: string, viewerId?: string) => {
-    let url = `${API_BASE}/stream-v3/live/${channelId}?token=${getToken()}`;
-    if (viewerId) url += `&viewerId=${viewerId}`;
-    return url;
-  },
+  // ─── STREAM URLS & INFO (v7 unified stream-engine) ─────────────────────────
+  streamEngineUrl: (channelId: string) => `${API_BASE}/stream-engine/live/${channelId}?token=${getToken()}`,
+  // Legacy aliases kept for VOD player (stream/movie, stream/episode)
+  streamLiveUrl: (channelId: string) => `${API_BASE}/stream-engine/live/${channelId}?token=${getToken()}`,
   streamMovieUrl: (movieId: string, audioTrack?: string, start?: number) => {
     let url = `${API_BASE}/stream/movie/${movieId}?token=${getToken()}`;
     if (audioTrack !== undefined && audioTrack !== '') url += `&audioTrack=${audioTrack}`;
@@ -535,21 +525,9 @@ export const api = {
     return url;
   },
 
-  async getLiveStreamInfo(channelId: string) {
-    const res = await fetch(`${API_BASE}/stream/live/${channelId}/info`, { headers: authHeaders() });
-    if (!res.ok) return { allAudioStreams: [] };
-    return res.json();
-  },
-
-  async getLiveStreamInfoV2(channelId: string) {
-    const res = await fetch(`${API_BASE}/stream-v2/live/${channelId}/info`, { headers: authHeaders() });
-    if (!res.ok) return { allAudioStreams: [] };
-    return res.json();
-  },
-
-  async getLiveStreamInfoV3(channelId: string) {
-    const res = await fetch(`${API_BASE}/stream-v3/live/${channelId}/info`, { headers: authHeaders() });
-    if (!res.ok) return { allAudioStreams: [] };
+  async getLiveEngineInfo(channelId: string) {
+    const res = await fetch(`${API_BASE}/stream-engine/live/${channelId}/info`, { headers: authHeaders() });
+    if (!res.ok) return { videoCodec: 'h264', audioTracks: [{ index: 0, codec: 'aac', language: 'default' }], subtitleTracks: [], container: 'mpegts', scannedAt: Date.now() };
     return res.json();
   },
 

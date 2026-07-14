@@ -1,7 +1,6 @@
 // Refresh diagnostics
 import { Controller, Get, Post, Delete, Param, Body } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CodecService } from '../stream/codec.service';
 import { ObservabilityService } from './observability.service';
 import * as bcrypt from 'bcrypt';
 import * as os from 'os';
@@ -27,7 +26,6 @@ export class SadwikController {
 
   constructor(
     private prisma: PrismaService,
-    private codecService: CodecService,
     private observability: ObservabilityService,
     private paymentsService: PaymentsService,
   ) {
@@ -92,13 +90,9 @@ export class SadwikController {
       streamsCount: (p._count.liveChannels || 0) + (p._count.movies || 0) + (p._count.series || 0),
     }));
 
-    // 3. Codec & Pipeline Metrics
-    const codecStats = await this.codecService.getMetrics();
-
-    // 4. Un-analyzed count (total items - analyzed items)
-    const analyzedCount = codecStats.total;
-    const totalItems = totalContent;
-    const unanalyzedCount = Math.max(0, totalItems - analyzedCount);
+    // 3. Codec & Pipeline Metrics — static summary (codec scan moved to stream-engine)
+    const analyzedCount = 0;
+    const unanalyzedCount = 0;
 
     return {
       users: {
@@ -112,11 +106,11 @@ export class SadwikController {
       },
       providers: activeProvidersList,
       codecs: {
-        totalAnalyzed: codecStats.total,
-        direct: codecStats.direct,
-        audioTranscode: codecStats.audioTranscode,
-        videoTranscode: codecStats.videoTranscode,
-        broken: codecStats.broken,
+        totalAnalyzed: analyzedCount,
+        direct: 0,
+        audioTranscode: 0,
+        videoTranscode: 0,
+        broken: 0,
         unanalyzed: unanalyzedCount,
       },
     };
@@ -124,7 +118,7 @@ export class SadwikController {
 
   @Post('trigger-scan')
   async triggerScan() {
-    return this.codecService.forceTriggerScan();
+    return { message: 'Codec scanning moved to stream-engine ffprobe service. No scan needed.' };
   }
 
   @Get('system-metrics')

@@ -290,8 +290,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
         const id = rawSourceUrl.split('/stream/episode/')[1].split('?')[0]
         fetchPromise = api.getEpisodeStreamInfo(id)
       } else if (isLive) {
-        const id = rawSourceUrl.split('/stream/live/')[1].split('?')[0]
-        fetchPromise = api.getLiveStreamInfo(id)
+        const id = rawSourceUrl.split('/stream-engine/live/')[1]?.split('?')[0]
+          || rawSourceUrl.split('/stream/live/')[1]?.split('?')[0]
+        if (id) fetchPromise = api.getLiveEngineInfo(id)
       }
 
       /**
