@@ -558,8 +558,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
           const createAndAttachPlayer = (urlToPlay: string): any => {
             if (!videoRef.current || isDestroyedRef.current) return null
 
+            let absoluteUrl = urlToPlay
+            if (absoluteUrl.startsWith('/')) {
+              if (typeof window !== 'undefined') {
+                absoluteUrl = `${window.location.origin}${absoluteUrl}`
+              }
+            }
+
             const mpegtsPlayer = mpegts.createPlayer(
-              { type: 'mpegts', isLive: true, url: urlToPlay },
+              { type: 'mpegts', isLive: true, url: absoluteUrl },
               {
                 enableWorker: true,
                 // Keep stash buffer ON — prevents starvation on slow connections.

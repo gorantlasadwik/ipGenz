@@ -140,7 +140,12 @@ export function LiveEngine({ channelId, channelName, autoplay = true }: LiveEngi
         return
       }
 
-      const streamUrl = api.streamEngineUrl(channelId)
+      let streamUrl = api.streamEngineUrl(channelId)
+      if (streamUrl.startsWith('/')) {
+        if (typeof window !== 'undefined') {
+          streamUrl = `${window.location.origin}${streamUrl}`
+        }
+      }
 
       const player = mpegts.default.createPlayer(
         {
