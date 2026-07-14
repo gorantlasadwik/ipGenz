@@ -31,6 +31,7 @@ interface StreamInfo {
   audioTracks: AudioTrack[]
   subtitleTracks: any[]
   container: string
+  directUrl?: string
 }
 
 interface LiveEngineProps {
@@ -63,6 +64,8 @@ export function LiveEngine({ channelId, channelName, autoplay = true }: LiveEngi
   const reconnectCountRef = useRef(0)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const destroyedRef = useRef(false)
+  const hlsPlayerRef = useRef<any>(null)
+  const useDirectRef = useRef(false)
 
   const [state, setState] = useState<PlayerState>('resolving')
   const [statusText, setStatusText] = useState('Initializing...')
@@ -101,6 +104,12 @@ export function LiveEngine({ channelId, channelName, autoplay = true }: LiveEngi
       } catch {}
       mpegtsPlayerRef.current = null
     }
+    if (hlsPlayerRef.current) {
+      try {
+        hlsPlayerRef.current.destroy()
+      } catch {}
+      hlsPlayerRef.current = null
+    }
   }, [])
 
   // ── Reconnect logic ────────────────────────────────────────────────────────
@@ -125,123 +134,231 @@ export function LiveEngine({ channelId, channelName, autoplay = true }: LiveEngi
   // ── Init native MSE player (mpegts.js) ────────────────────────────────────
 
   const initPlayer = useCallback(async () => {
-    if (destroyedRef.current || !videoRef.current) return
-
     destroyPlayer()
 
     const video = videoRef.current
+    if (!video) return
+
+    const handleError = () => {
+      if (!useDirectRef.current && streamInfo?.directUrl) {
+        console.warn('[LiveEngine] Server stream failed. Falling back to direct URL:', streamInfo.directUrl)
+        useDirectRef.current = true
+        setStatusText('Falling back to direct stream...')
+        setTimeout(() => {
+          initPlayer()
+        }, 100)
+      } else {
+        scheduleReconnect()
+      }
+    }
 
     try {
-      // Dynamic import of mpegts.js to avoid SSR issues
-      const mpegts = await import('mpegts.js')
-      if (!mpegts.default.isSupported()) {
-        setState('unsupported')
-        setErrorMessage('Your browser does not support the required video APIs (MSE). Please use a modern desktop browser.')
-        return
-      }
+      let streamUrl = useDirectRef.current && streamInfo?.directUrl
+        ? streamInfo.directUrl
+        : api.streamEngineUrl(channelId)
 
-      let streamUrl = api.streamEngineUrl(channelId)
       if (streamUrl.startsWith('/')) {
         if (typeof window !== 'undefined') {
           streamUrl = `${window.location.origin}${streamUrl}`
         }
       }
 
-      const player = mpegts.default.createPlayer(
-        {
-          type: 'mpegts',
-          isLive: true,
-          url: streamUrl,
-        },
-        {
-          enableWorker: true,
-          enableStashBuffer: true,
-          stashInitialSize: 512 * 1024,
-          lazyLoad: false,
-          // Live sync settings
-          liveBufferLatencyChasing: true,
-          liveSync: true,
-          liveSyncMaxLatency: 14.0,
-          liveSyncPlaybackRate: 1.1,
-          // Robustness
-          autoCleanupSourceBuffer: true,
-          autoCleanupMaxBackwardDuration: 60,
-          autoCleanupMinBackwardDuration: 30,
+      const isHls = streamUrl.toLowerCase().includes('m3u8')
+
+      if (isHls) {
+        console.log('[LiveEngine] Initializing HLS stream:', streamUrl)
+        
+        // 1. Native HLS support (Safari, iOS, macOS)
+        if (video.canPlayType('application/x-mpegURL') || video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = streamUrl
+          video.load()
+          
+          const onPlaying = () => {
+            reconnectCountRef.current = 0
+            setState('live')
+            setStatusText('')
+          }
+          const onWaiting = () => {
+            if (state !== 'reconnecting') setState('buffering')
+          }
+          const onStalled = () => {
+            if (state !== 'reconnecting') setState('buffering')
+          }
+          const onError = () => {
+            handleError()
+          }
+
+          video.addEventListener('playing', onPlaying)
+          video.addEventListener('waiting', onWaiting)
+          video.addEventListener('stalled', onStalled)
+          video.addEventListener('error', onError)
+
+          if (autoplay) {
+            video.play().catch(() => {
+              video.muted = true
+              video.play().catch(() => {})
+            })
+          }
+          setState('loading')
+          setStatusText('Buffering HLS...')
         }
-      )
+        // 2. hls.js support
+        else {
+          const Hls = await import('hls.js')
+          if (!Hls.default.isSupported()) {
+            setState('unsupported')
+            setErrorMessage('Your browser does not support playing this HLS stream.')
+            return
+          }
 
-      mpegtsPlayerRef.current = player
-      player.attachMediaElement(video)
-      player.load()
+          const hls = new Hls.default({
+            maxBufferLength: 10,
+            maxMaxBufferLength: 15,
+            liveSyncDurationCount: 3,
+          })
+          hlsPlayerRef.current = hls
+          hls.loadSource(streamUrl)
+          hls.attachMedia(video)
 
-      // ── Event handlers ──────────────────────────────────────────────────────
+          hls.on(Hls.default.Events.MANIFEST_PARSED, () => {
+            if (autoplay) {
+              video.play().catch(() => {
+                video.muted = true
+                video.play().catch(() => {})
+              })
+            }
+          })
 
-      player.on(mpegts.default.Events.MEDIA_INFO, () => {
+          hls.on(Hls.default.Events.ERROR, (event, data) => {
+            console.warn('[LiveEngine] hls.js error:', data)
+            if (data.fatal) {
+              handleError()
+            }
+          })
+
+          const onPlaying = () => {
+            reconnectCountRef.current = 0
+            setState('live')
+            setStatusText('')
+          }
+          const onWaiting = () => {
+            if (state !== 'reconnecting') setState('buffering')
+          }
+          const onStalled = () => {
+            if (state !== 'reconnecting') setState('buffering')
+          }
+          const onError = () => {
+            handleError()
+          }
+
+          video.addEventListener('playing', onPlaying)
+          video.addEventListener('waiting', onWaiting)
+          video.addEventListener('stalled', onStalled)
+          video.addEventListener('error', onError)
+
+          setState('loading')
+          setStatusText('Buffering HLS...')
+        }
+      } else {
+        // Dynamic import of mpegts.js to avoid SSR issues
+        const mpegts = await import('mpegts.js')
+        if (!mpegts.default.isSupported()) {
+          setState('unsupported')
+          setErrorMessage('Your browser does not support the required video APIs (MSE). Please use a modern desktop browser.')
+          return
+        }
+
+        const player = mpegts.default.createPlayer(
+          {
+            type: 'mpegts',
+            isLive: true,
+            url: streamUrl,
+          },
+          {
+            enableWorker: true,
+            enableStashBuffer: true,
+            stashInitialSize: 512 * 1024,
+            lazyLoad: false,
+            liveBufferLatencyChasing: true,
+            liveSync: true,
+            liveSyncMaxLatency: 14.0,
+            liveSyncPlaybackRate: 1.1,
+            autoCleanupSourceBuffer: true,
+            autoCleanupMaxBackwardDuration: 60,
+            autoCleanupMinBackwardDuration: 30,
+          }
+        )
+
+        mpegtsPlayerRef.current = player
+        player.attachMediaElement(video)
+        player.load()
+
+        player.on(mpegts.default.Events.MEDIA_INFO, () => {
+          setState('loading')
+          setStatusText('Buffering...')
+        })
+
+        player.on(mpegts.default.Events.ERROR, (errType: any, errDetail: any) => {
+          console.error('[LiveEngine] mpegts error:', errType, errDetail)
+          handleError()
+        })
+
+        const onPlaying = () => {
+          reconnectCountRef.current = 0
+          setState('live')
+          setStatusText('')
+        }
+        const onWaiting = () => {
+          if (state !== 'reconnecting') setState('buffering')
+        }
+        const onStalled = () => {
+          if (state !== 'reconnecting') setState('buffering')
+        }
+        const onError = () => {
+          handleError()
+        }
+
+        video.addEventListener('playing', onPlaying)
+        video.addEventListener('waiting', onWaiting)
+        video.addEventListener('stalled', onStalled)
+        video.addEventListener('error', onError)
+
+        const liveSync = new LiveSyncController({
+          targetLatencyMs: 9000,
+          smallMarginMs: 1500,
+          maxLatencyMs: 28000,
+        })
+        liveSync.attachVideo(video)
+        liveSyncRef.current = liveSync
+
+        bufferIntervalRef.current = setInterval(() => {
+          if (video.buffered.length > 0) {
+            const bufferedAhead = video.buffered.end(video.buffered.length - 1) - video.currentTime
+            setBufferHealth(Math.min(100, Math.round((bufferedAhead / 15) * 100)))
+          }
+        }, 2000)
+
+        if (autoplay) {
+          video.play().catch(() => {
+            video.muted = true
+            video.play().catch(() => {})
+          })
+        }
+
         setState('loading')
         setStatusText('Buffering...')
-      })
-
-      player.on(mpegts.default.Events.ERROR, (errType: any, errDetail: any) => {
-        console.error('[LiveEngine] mpegts error:', errType, errDetail)
-        scheduleReconnect()
-      })
-
-      video.addEventListener('playing', () => {
-        reconnectCountRef.current = 0 // reset on successful play
-        setState('live')
-        setStatusText('')
-      })
-
-      video.addEventListener('waiting', () => {
-        if (state !== 'reconnecting') setState('buffering')
-      })
-
-      video.addEventListener('stalled', () => {
-        if (state !== 'reconnecting') setState('buffering')
-      })
-
-      video.addEventListener('error', () => {
-        scheduleReconnect()
-      })
-
-      // ── LiveSyncController ─────────────────────────────────────────────────
-      const liveSync = new LiveSyncController({
-        targetLatencyMs: 9000,
-        smallMarginMs: 1500,
-        maxLatencyMs: 28000,
-      })
-      liveSync.attachVideo(video)
-      liveSyncRef.current = liveSync
-
-      // ── Buffer health monitor ──────────────────────────────────────────────
-      bufferIntervalRef.current = setInterval(() => {
-        if (video.buffered.length > 0) {
-          const bufferedAhead = video.buffered.end(video.buffered.length - 1) - video.currentTime
-          setBufferHealth(Math.min(100, Math.round((bufferedAhead / 15) * 100)))
-        }
-      }, 2000)
-
-      if (autoplay) {
-        video.play().catch(() => {
-          // Autoplay blocked — user interaction needed
-          video.muted = true
-          video.play().catch(() => {})
-        })
       }
-
-      setState('loading')
-      setStatusText('Buffering...')
-
     } catch (err: any) {
       console.error('[LiveEngine] Init error:', err)
-      scheduleReconnect()
+      handleError()
     }
-  }, [channelId, autoplay, destroyPlayer, scheduleReconnect])
+  }, [channelId, autoplay, destroyPlayer, scheduleReconnect, streamInfo])
 
   // ── Main init sequence ─────────────────────────────────────────────────────
 
   useEffect(() => {
     destroyedRef.current = false
+    useDirectRef.current = false
 
     const init = async () => {
       setState('resolving')
@@ -284,7 +401,7 @@ export function LiveEngine({ channelId, channelName, autoplay = true }: LiveEngi
       destroyedRef.current = true
       destroyPlayer()
     }
-  }, [channelId])
+  }, [channelId, initPlayer, destroyPlayer])
 
   // ── UI helpers ─────────────────────────────────────────────────────────────
 

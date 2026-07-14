@@ -79,7 +79,7 @@ export class StreamEngineService {
    * Returns stream metadata (codec info, audio tracks) for the client
    * to determine its decode path before starting playback.
    */
-  async getStreamInfo(channelId: string, userId: string): Promise<StreamProfile> {
+  async getStreamInfo(channelId: string, userId: string): Promise<StreamProfile & { directUrl?: string }> {
     const channel = await this.prisma.liveChannel.findFirst({
       where: { id: channelId, provider: { userId } },
     });
@@ -94,7 +94,11 @@ export class StreamEngineService {
       };
     }
 
-    return this.ffprobe.scanStream(channel.streamUrl);
+    const profile = await this.ffprobe.scanStream(channel.streamUrl);
+    return {
+      ...profile,
+      directUrl: channel.streamUrl,
+    };
   }
 
   /**
